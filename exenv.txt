@@ -1,0 +1,7 @@
+PORT=서버포트
+
+DB_PORT=디비포트
+DB_HOST=디비아이피
+DB_USER=사용자
+DB_PASS="암호"
+DB_NAME=디비명
