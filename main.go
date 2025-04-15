@@ -35,6 +35,6 @@ func main() {
 
 	// 서버 실행
 	if err := r.Run(":" + port); err != nil {
-		log.Fatalf("서버 실행 오류: %v", err)
+		log.Fatalf("[종료] 서버 실행 오류: %v", err)
 	}
 }

@@ -17,10 +17,10 @@ func SetDB(db *sql.DB) {
 	DB = db
 }
 
-// CRUDModel 인터페이스는 모델마다 Insert, Update, Delete를 수행하기 위해 필요한 메서드를 정의합니다.
-type CRUDModel interface {
-	// Validate는 모델의 유효성 검사를 실행합니다.
-	Validate() error
+// ValidateModel은 전달받은 model에 대해 유효성 검사를 실행합니다.
+// 모델은 validate 태그가 지정된 Exported 필드들을 가지고 있어야 합니다.
+func ValidateModel(model interface{}) error {
+	return getValidator().Struct(model)
 }
 
 // BuildInsertQueryAndExecute는 주어진 테이블 이름과 데이터 맵을 기반으로
@@ -30,7 +30,6 @@ func BuildInsertQuery(tableName string, data map[string]interface{}) (int64, err
 	if DB == nil {
 		return 0, fmt.Errorf("database connection is not set")
 	}
-
 	columns := []string{}
 	placeholders := []string{}
 	args := []interface{}{}

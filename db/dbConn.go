@@ -30,10 +30,10 @@ func InitDB() {
 	var err error
 	Conn, err = sql.Open("mysql", dsn)
 	if err != nil {
-		log.Fatalf("데이터베이스 열기 에러: %v", err)
+		log.Fatalf("[종료] 데이터베이스 열기 에러: %v", err)
 	}
 	if err = Conn.Ping(); err != nil {
-		log.Fatalf("데이터베이스 연결 에러: %v", err)
+		log.Fatalf("[종료] 데이터베이스 연결 에러: %v", err)
 	}
 	log.Println("MySQL 연결 성공")
 

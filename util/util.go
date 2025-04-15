@@ -1,8 +1,8 @@
 package util
 
 import (
-	"fmt"
-	"strings"
+	"log"
+	"reflect"
 	"sync"
 )
 
@@ -15,23 +15,24 @@ type Util struct{}
 //
 //
 
-// FormatGreeting은 이름을 입력받아 인사말 문자열을 반환합니다.
-func (u *Util) FormatGreeting(name string) string {
-	return fmt.Sprintf("Hello, %s!", name)
-}
-
-// JoinStrings는 문자열 슬라이스를 주어진 구분자로 연결하여 반환합니다.
-func (u *Util) JoinStrings(strs []string, sep string) string {
-	return strings.Join(strs, sep)
-}
-
-// SumIntSlice는 정수 슬라이스의 합을 계산하여 반환합니다.
-func (u *Util) SumIntSlice(numbers []int) int {
-	sum := 0
-	for _, v := range numbers {
-		sum += v
+// AssignStringFields는 data map에서 값이 문자열인 경우, fieldMap에 지정된 포인터 변수에 대입합니다.
+func AssignStringFields(data map[string]interface{}, fieldMap map[string]*string) {
+	for key, ptr := range fieldMap {
+		if value, exists := data[key]; exists {
+			if s, ok := value.(string); ok {
+				*ptr = s
+			} else {
+				log.Printf("Key %s exists but is not a string", key)
+			}
+		}
 	}
-	return sum
+}
+
+func Empty(v interface{}) bool {
+	if v == nil {
+		return false
+	}
+	return reflect.ValueOf(v).IsZero()
 }
 
 //
