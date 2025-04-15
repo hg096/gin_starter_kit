@@ -6,6 +6,8 @@ import (
 	"log"
 	"os"
 
+	"gin_starter/model/core" // core 패키지 import (모듈 경로에 맞게 수정)
+
 	_ "github.com/go-sql-driver/mysql"
 )
 
@@ -34,4 +36,7 @@ func InitDB() {
 		log.Fatalf("데이터베이스 연결 에러: %v", err)
 	}
 	log.Println("MySQL 연결 성공")
+
+	// core 패키지 내 전역 DB 변수 설정 (이 부분을 여기서 처리)
+	core.SetDB(Conn)
 }
