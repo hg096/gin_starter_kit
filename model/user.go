@@ -6,6 +6,8 @@ import (
 	"gin_starter/util"
 	"log"
 
+	"github.com/gin-gonic/gin"
+	"github.com/go-playground/validator"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -40,7 +42,8 @@ func NewUpUser() *UserUpdate {
 	}
 }
 
-func (u *UserInsert) Insert(data map[string]interface{}) (int64, error) {
+func (u *UserInsert) Insert(c *gin.Context, tx *sql.Tx,
+	data map[string]string, errWhere string) (int64, error, error) {
 
 	fieldMap := map[string]*string{
 		"u_id":    &u.U_id,
@@ -50,27 +53,37 @@ func (u *UserInsert) Insert(data map[string]interface{}) (int64, error) {
 	}
 	util.AssignStringFields(data, fieldMap)
 	if err := core.ValidateModel(u); err != nil {
-		return 0, err
-	}
-
-	if pass, ok := data["u_pass"].(string); ok {
-		hashedPass, err := bcrypt.GenerateFromPassword([]byte(pass), bcrypt.DefaultCost)
-		if err != nil {
-			return 0, err
+		// !!!!!
+		if vErrs, ok := err.(validator.ValidationErrors); ok {
+			for _, fieldErr := range vErrs {
+				// fieldErr.Field() : 오류가 발생한 필드 이름
+				// fieldErr.Tag()   : 실패한 검증 태그 (예: "required", "email" 등)
+				// fieldErr.Param() : 태그에 전달된 추가 파라미터 (예: min=6에서 "6")
+				log.Printf("Field '%s' failed validation: %s (param: %s)",
+					fieldErr.Field(), fieldErr.Tag(), fieldErr.Param())
+			}
 		}
-		data["u_pass"] = string(hashedPass)
+		return 0, err, nil
 	}
 
-	insertedID, err := core.BuildInsertQuery(nil, tableName, data)
+	pass := data["u_pass"]
+	hashedPass, err := bcrypt.GenerateFromPassword([]byte(pass), bcrypt.DefaultCost)
 	if err != nil {
-		return 0, err
+		return 0, err, nil
 	}
-	log.Printf("User Insert 성공. Inserted ID: %d", insertedID)
+	data["u_pass"] = string(hashedPass)
 
-	return insertedID, nil
+	insertedID, err := core.BuildInsertQuery(c, tx, tableName, data, errWhere)
+	if err != nil {
+		return 0, nil, err
+	}
+	// log.Printf("User Insert 성공. Inserted ID: %d", insertedID)
+
+	return insertedID, nil, nil
 }
 
-func (u *UserUpdate) Update(data map[string]interface{}, where string, whereData []interface{}) (sql.Result, error) {
+func (u *UserUpdate) Update(c *gin.Context, tx *sql.Tx,
+	data map[string]string, where string, whereData []string, errWhere string) (sql.Result, error, error) {
 
 	fieldMap := map[string]*string{
 		"u_id":    &u.U_id,
@@ -80,25 +93,24 @@ func (u *UserUpdate) Update(data map[string]interface{}, where string, whereData
 	}
 	util.AssignStringFields(data, fieldMap)
 	if err := core.ValidateModel(u); err != nil {
-		return nil, err
+		return nil, err, nil
 	}
 
 	if !util.Empty(data["u_pass"]) {
-		if pass, ok := data["u_pass"].(string); ok {
-			hashedPass, err := bcrypt.GenerateFromPassword([]byte(pass), bcrypt.DefaultCost)
-			if err != nil {
-				return nil, err
-			}
-			data["u_pass"] = string(hashedPass)
+		pass := data["u_pass"]
+		hashedPass, err := bcrypt.GenerateFromPassword([]byte(pass), bcrypt.DefaultCost)
+		if err != nil {
+			return nil, err, nil
 		}
+		data["u_pass"] = string(hashedPass)
 	}
-	sqlResult, err := core.BuildUpdateQuery(nil, tableName, data, where, whereData)
+	sqlResult, err := core.BuildUpdateQuery(c, tx, tableName, data, where, whereData, errWhere)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// 콘솔찍기위함
-	log.Printf("User update 성공. update ID: %s / %s", where, whereData)
+	// log.Printf("User update 성공. update ID: %s / %s", where, whereData)
 
-	return sqlResult, nil
+	return sqlResult, nil, nil
 }

@@ -2,37 +2,28 @@ package util
 
 import (
 	"database/sql"
-	"fmt"
 	"gin_starter/db"
 	"log"
+	"net/http"
 	"reflect"
 	"sync"
 	"time"
+
+	"github.com/gin-gonic/gin"
 )
 
 // Util 구조체는 유틸리티 함수들을 포함
 type Util struct{}
 
-// HTTPError 는 HTTP 에러 상태, 메시지 및 원본 에러를 포함하는 커스텀 에러 타입입니다.
-type HTTPError struct {
-	Code     int    // HTTP 상태 코드 (예: 401)
-	ErrCode  int    // 에러구분 코드 (예: 401)
-	Message  string // 사용자에게 보여줄 에러 메시지
-	Original error  // 원본 에러
-}
-
-func (he *HTTPError) Error() string {
-	return fmt.Sprintf("%d: %s - %v", he.Code, he.Message, he.Original)
-}
-
 // HandleError는 주어진 에러를 처리하여 로컬 및 DB 로그를 기록
-func HandleError(tx *sql.Tx, code int, errCode int, errMsg string, errWhere string, err error) error {
+func HandleSqlError(c *gin.Context, tx *sql.Tx,
+	sql string, errCode int, errMsg string, errWhere string, err error) {
 
 	if tx != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
-			log.Printf("트랜잭션 롤백 실패: %v", rbErr)
+			// log.Printf("트랜잭션 롤백 실패: %v", rbErr)
 		} else {
-			log.Println("트랜잭션 롤백 성공")
+			// log.Println("트랜잭션 롤백 성공")
 		}
 	}
 
@@ -40,35 +31,36 @@ func HandleError(tx *sql.Tx, code int, errCode int, errMsg string, errWhere stri
 
 	if db.Conn != nil {
 		_, dbErr := db.Conn.Exec(
-			"INSERT INTO _a_error_logs (el_where, el_message, el_regi_date) VALUES (?, ?, ?)",
-			errWhere, err.Error(), time.Now(),
+			"INSERT INTO _a_error_logs (el_where, el_message, el_sql, el_regi_date) VALUES (?, ?, ?, ?)",
+			errWhere, err.Error(), sql, time.Now(),
 		)
 		if dbErr != nil {
-			log.Printf("DB 로그 저장 실패: %v", dbErr)
+			// log.Printf("DB 로그 저장 실패: %v", dbErr)
 		}
 	} else {
-		log.Println("DB 연결이 설정되어 있지 않아 에러 로그를 저장하지 못했습니다.")
+		// log.Println("DB 연결이 설정되어 있지 않아 에러 로그를 저장하지 못했습니다.")
 	}
 
-	return &HTTPError{
-		Code:     code,
-		ErrCode:  errCode,
-		Message:  errMsg,
-		Original: err,
-	}
+	c.JSON(http.StatusBadRequest, gin.H{"message": errMsg, "errCode": errCode})
+	// c.Abort()
 }
 
 // AssignStringFields는 data map에서 값이 문자열인 경우, fieldMap에 지정된 포인터 변수에 대입
-func AssignStringFields(data map[string]interface{}, fieldMap map[string]*string) {
+func AssignStringFields(data map[string]string, fieldMap map[string]*string) {
 	for key, ptr := range fieldMap {
 		if value, exists := data[key]; exists {
-			if s, ok := value.(string); ok {
-				*ptr = s
-			} else {
-				log.Printf("Key %s exists but is not a string", key)
-			}
+			*ptr = value
 		}
 	}
+}
+
+// []string -> []interface{}
+func ToInterfaceSlice(strs []string) []interface{} {
+	result := make([]interface{}, len(strs))
+	for i, s := range strs {
+		result[i] = s
+	}
+	return result
 }
 
 func Empty(v interface{}) bool {
