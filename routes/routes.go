@@ -5,24 +5,22 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"gin_starter/db" // 실제 모듈 경로로 수정하세요.
+	"gin_starter/db"
 	"gin_starter/routes/api"
 	"gin_starter/routes/out"
 )
 
-// SetupRoutes 함수는 전달받은 gin.Engine에 모든 라우트를 등록합니다.
+// SetupRoutes 함수는 전달받은 gin.Engine에 모든 라우트를 등록
 func SetupRoutes(r *gin.Engine) {
-	// 기본 홈 라우트
+
 	r.GET("/", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"message": "home"})
 	})
 
-	// Ping 테스트 라우트
 	r.GET("/ping", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"message": "pong"})
 	})
 
-	// /api 그룹 생성
 	apiGroup := r.Group("/api")
 	{
 		// /api/user 라우트 등록
@@ -31,10 +29,8 @@ func SetupRoutes(r *gin.Engine) {
 		api.SetupBlogRoutes(apiGroup)
 	}
 
-	// /out 그룹 생성
 	outGroup := r.Group("/out")
 	{
-		// /out 관련 라우트 등록
 		out.SetupOutRoutes(outGroup)
 	}
 

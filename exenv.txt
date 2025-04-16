@@ -5,3 +5,20 @@ DB_HOST=디비아이피
 DB_USER=사용자
 DB_PASS="암호"
 DB_NAME=디비명
+# debug, release, test
+GIN_MODE="debug"
+
+작업목록
+
+라우팅 - 완
+모델 - 완
+CRUD 함수 - 완
+유효성 검사 - 완
+개발환경 배포환경 로그출력 제어
+실패시 통합 에러처리
+jwt 토큰인증
+필터(인증관리)
+사용자 등급 제어
+
+추가 고려
+스웨거

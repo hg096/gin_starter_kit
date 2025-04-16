@@ -6,7 +6,7 @@ import (
 	"sync"
 )
 
-// Util 구조체는 유틸리티 함수들을 포함합니다.
+// Util 구조체는 유틸리티 함수들을 포함
 type Util struct{}
 
 //
@@ -15,7 +15,7 @@ type Util struct{}
 //
 //
 
-// AssignStringFields는 data map에서 값이 문자열인 경우, fieldMap에 지정된 포인터 변수에 대입합니다.
+// AssignStringFields는 data map에서 값이 문자열인 경우, fieldMap에 지정된 포인터 변수에 대입
 func AssignStringFields(data map[string]interface{}, fieldMap map[string]*string) {
 	for key, ptr := range fieldMap {
 		if value, exists := data[key]; exists {
@@ -47,7 +47,7 @@ var (
 )
 
 // GetInstance는 Util의 싱글톤 인스턴스를 반환합니다.
-// 여러 고루틴에서 동시에 호출해도 once.Do에 의해 단 한 번만 생성됩니다.
+// 여러 고루틴에서 동시에 호출해도 once.Do에 의해 단 한 번만 생성
 func GetInstance() *Util {
 	once.Do(func() {
 		instance = &Util{}
