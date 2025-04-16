@@ -61,7 +61,7 @@ func (u *UserInsert) Insert(data map[string]interface{}) (int64, error) {
 		data["u_pass"] = string(hashedPass)
 	}
 
-	insertedID, err := core.BuildInsertQuery(tableName, data)
+	insertedID, err := core.BuildInsertQuery(nil, tableName, data)
 	if err != nil {
 		return 0, err
 	}
@@ -92,7 +92,7 @@ func (u *UserUpdate) Update(data map[string]interface{}, where string, whereData
 			data["u_pass"] = string(hashedPass)
 		}
 	}
-	sqlResult, err := core.BuildUpdateQuery(tableName, data, where, whereData)
+	sqlResult, err := core.BuildUpdateQuery(nil, tableName, data, where, whereData)
 	if err != nil {
 		return nil, err
 	}

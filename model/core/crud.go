@@ -3,18 +3,18 @@ package core
 import (
 	"database/sql"
 	"fmt"
+	"gin_starter/db"
 	"strconv"
 	"strings"
-	// "gin_starter/db"
 )
 
-// 전역 변수 DB: 초기화 후 crud.go 내에서 모두 사용 가능
-var DB *sql.DB
+// // 전역 변수 DB: 초기화 후 crud.go 내에서 모두 사용 가능
+// var DB *sql.DB
 
-// SetDB는 외부에서 데이터베이스 연결 객체(*sql.DB)를 설정
-func SetDB(db *sql.DB) {
-	DB = db
-}
+// // SetDB는 외부에서 데이터베이스 연결 객체(*sql.DB)를 설정
+// func SetDB(db *sql.DB) {
+// 	db.Conn = db
+// }
 
 // ValidateModel은 전달받은 model에 대해 유효성 검사를 실행
 // 모델은 validate 태그가 지정된 Exported 필드들을 가져야함
@@ -24,9 +24,9 @@ func ValidateModel(model interface{}) error {
 
 // BuildInsertQueryAndExecute는 주어진 테이블 이름과 데이터 맵을 기반으로
 // INSERT 쿼리를 생성하고, 전역 DB 객체를 사용하여 실행한 후 결과를 반환
-func BuildInsertQuery(tableName string, data map[string]interface{}) (int64, error) {
+func BuildInsertQuery(tx *sql.Tx, tableName string, data map[string]interface{}) (int64, error) {
 
-	if DB == nil {
+	if db.Conn == nil {
 		return 0, fmt.Errorf("database connection is not set")
 	}
 	columns := []string{}
@@ -45,7 +45,7 @@ func BuildInsertQuery(tableName string, data map[string]interface{}) (int64, err
 		strings.Join(placeholders, ", "),
 	)
 
-	result, err := DB.Exec(query, args...)
+	result, err := db.Conn.Exec(query, args...)
 	if err != nil {
 		return 0, err
 	}
@@ -59,9 +59,9 @@ func BuildInsertQuery(tableName string, data map[string]interface{}) (int64, err
 
 // BuildUpdateQueryAndExecute는 테이블 이름, 업데이트할 데이터, WHERE 조건과 인자를 받아
 // 동적으로 UPDATE 쿼리를 생성하고 전역 DB 객체(DB 변수)를 사용하여 안전하게 실행합
-func BuildUpdateQuery(tableName string, updateData map[string]interface{}, whereClause string, whereArgs []interface{}) (sql.Result, error) {
+func BuildUpdateQuery(tx *sql.Tx, tableName string, updateData map[string]interface{}, whereClause string, whereArgs []interface{}) (sql.Result, error) {
 
-	if DB == nil {
+	if db.Conn == nil {
 		return nil, fmt.Errorf("database connection is not set")
 	}
 
@@ -115,7 +115,7 @@ func BuildUpdateQuery(tableName string, updateData map[string]interface{}, where
 	args = append(args, whereArgs...)
 
 	// 파라미터라이즈드 쿼리 실행 (SQL 인젝션 방지)
-	result, err := DB.Exec(query, args...)
+	result, err := db.Conn.Exec(query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -125,9 +125,9 @@ func BuildUpdateQuery(tableName string, updateData map[string]interface{}, where
 
 // BuildDeleteQueryAndExecute는 주어진 테이블 이름과 WHERE 조건(절 및 인자)을 기반으로
 // DELETE 쿼리를 생성하여 전역 DB 객체를 사용해 실행한 후 결과를 반환
-func BuildDeleteQuery(tableName string, whereClause string, whereArgs []interface{}) (sql.Result, error) {
+func BuildDeleteQuery(tx *sql.Tx, tableName string, whereClause string, whereArgs []interface{}) (sql.Result, error) {
 	// DB가 설정되어 있는지 확인
-	if DB == nil {
+	if db.Conn == nil {
 		return nil, fmt.Errorf("database connection is not set")
 	}
 
@@ -135,7 +135,7 @@ func BuildDeleteQuery(tableName string, whereClause string, whereArgs []interfac
 	query := fmt.Sprintf("DELETE FROM %s WHERE %s", tableName, whereClause)
 
 	// parameterized query 방식으로 쿼리 실행 (SQL 인젝션 방지)
-	result, err := DB.Exec(query, whereArgs...)
+	result, err := db.Conn.Exec(query, whereArgs...)
 	if err != nil {
 		return nil, err
 	}
