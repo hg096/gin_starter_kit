@@ -2,12 +2,13 @@ package model
 
 import (
 	"database/sql"
+	"errors"
 	"gin_starter/model/core"
 	"gin_starter/util"
-	"log"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/go-playground/validator"
+	v10 "github.com/go-playground/validator/v10"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -16,17 +17,26 @@ import (
 
 type UserInsert struct {
 	core.BaseModel
-	U_id    string `db:"u_id"` // Duplicate entry
+	U_id    string `db:"u_id"`
 	U_pass  string `db:"u_pass" validate:"min=6,max=20,required"`
 	U_name  string `db:"u_name" validate:"max=30,required"`
 	U_email string `db:"u_email" validate:"email,required"`
 }
 type UserUpdate struct {
 	core.BaseModel
-	U_id    string `db:"u_id"` // Duplicate entry
-	U_pass  string `db:"u_pass" validate:"min=6,max=20"`
-	U_name  string `db:"u_name" validate:"max=30"`
-	U_email string `db:"u_email" validate:"email"`
+	U_id    string `db:"u_id"`
+	U_pass  string `db:"u_pass" validate:"omitempty,min=6,max=20"`
+	U_name  string `db:"u_name" validate:"omitempty,max=30"`
+	U_email string `db:"u_email" validate:"omitempty,email"`
+}
+
+var ve v10.ValidationErrors
+
+var validateConverts = map[string]string{
+	"U_id":    "아이디",
+	"U_pass":  "비밀번호",
+	"U_name":  "이름",
+	"U_email": "이메일",
 }
 
 var tableName string = "_user"
@@ -52,16 +62,11 @@ func (u *UserInsert) Insert(c *gin.Context, tx *sql.Tx,
 		"u_email": &u.U_email,
 	}
 	util.AssignStringFields(data, fieldMap)
+
 	if err := core.ValidateModel(u); err != nil {
-		// !!!!!
-		if vErrs, ok := err.(validator.ValidationErrors); ok {
-			for _, fieldErr := range vErrs {
-				// fieldErr.Field() : 오류가 발생한 필드 이름
-				// fieldErr.Tag()   : 실패한 검증 태그 (예: "required", "email" 등)
-				// fieldErr.Param() : 태그에 전달된 추가 파라미터 (예: min=6에서 "6")
-				log.Printf("Field '%s' failed validation: %s (param: %s)",
-					fieldErr.Field(), fieldErr.Tag(), fieldErr.Param())
-			}
+		if errors.As(err, &ve) {
+			msgs := core.FormatValidationErrors(ve, validateConverts)
+			c.JSON(http.StatusBadRequest, gin.H{"errors": msgs})
 		}
 		return 0, err, nil
 	}
@@ -69,6 +74,7 @@ func (u *UserInsert) Insert(c *gin.Context, tx *sql.Tx,
 	pass := data["u_pass"]
 	hashedPass, err := bcrypt.GenerateFromPassword([]byte(pass), bcrypt.DefaultCost)
 	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "요청에 실패했습니다.", "errCode": 0})
 		return 0, err, nil
 	}
 	data["u_pass"] = string(hashedPass)
@@ -83,34 +89,39 @@ func (u *UserInsert) Insert(c *gin.Context, tx *sql.Tx,
 }
 
 func (u *UserUpdate) Update(c *gin.Context, tx *sql.Tx,
-	data map[string]string, where string, whereData []string, errWhere string) (sql.Result, error, error) {
+	data map[string]string, where string, whereData []string, errWhere string) (error, error) {
 
 	fieldMap := map[string]*string{
-		"u_id":    &u.U_id,
+		// "u_id":    &u.U_id,
 		"u_pass":  &u.U_pass,
 		"u_name":  &u.U_name,
 		"u_email": &u.U_email,
 	}
 	util.AssignStringFields(data, fieldMap)
 	if err := core.ValidateModel(u); err != nil {
-		return nil, err, nil
+		if errors.As(err, &ve) {
+			msgs := core.FormatValidationErrors(ve, validateConverts)
+			c.JSON(http.StatusBadRequest, gin.H{"errors": msgs})
+		}
+		return err, nil
 	}
 
 	if !util.Empty(data["u_pass"]) {
 		pass := data["u_pass"]
 		hashedPass, err := bcrypt.GenerateFromPassword([]byte(pass), bcrypt.DefaultCost)
 		if err != nil {
-			return nil, err, nil
+			return err, nil
 		}
 		data["u_pass"] = string(hashedPass)
 	}
-	sqlResult, err := core.BuildUpdateQuery(c, tx, tableName, data, where, whereData, errWhere)
+	delete(data, "u_id")
+	_, err := core.BuildUpdateQuery(c, tx, tableName, data, where, whereData, errWhere)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	// 콘솔찍기위함
 	// log.Printf("User update 성공. update ID: %s / %s", where, whereData)
 
-	return sqlResult, nil, nil
+	return nil, nil
 }

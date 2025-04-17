@@ -49,18 +49,18 @@ func SetupUserRoutes(rg *gin.RouterGroup) {
 			user := model.NewUpUser()
 
 			data := map[string]string{
-				"u_id":    "Alice",
-				"u_pass":  "Alice11",
-				"u_name":  "Alice",
-				"u_email": "alice@example.com",
+				"u_id": "Alice",
+				// "u_pass": "Alice11",
+				// "u_name":  "Alice",
+				"u_email": "alice1@example.com",
 			}
 
-			sqlResult, valErr, sqlErr := user.Update(c, nil, data, "u_id = ?", []string{"Alice"}, "api/user/makeUp")
+			valErr, sqlErr := user.Update(c, nil, data, "u_id = ?", []string{"Alice"}, "api/user/makeUp")
 			if valErr != nil || sqlErr != nil {
 				log.Printf("User Insert 에러: %v", valErr)
 				return
 			} else {
-				fmt.Printf("User가 성공적으로 수정 되었습니다. Inserted ID: %s\n", sqlResult)
+				// fmt.Printf("User가 성공적으로 수정 되었습니다. Inserted ID: %s\n", sqlResult)
 			}
 
 			c.JSON(http.StatusOK, gin.H{"message": "User update"})

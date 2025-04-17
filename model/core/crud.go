@@ -5,18 +5,23 @@ import (
 	"fmt"
 	"gin_starter/db"
 	"gin_starter/util"
+	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	v10 "github.com/go-playground/validator/v10"
 )
 
 // ValidateModel은 전달받은 model에 대해 유효성 검사를 실행
 // 모델은 validate 태그가 지정된 Exported 필드들을 가져야함
+
 func ValidateModel(model interface{}) error {
 	return getValidator().Struct(model)
 }
 
+// sql 에러 작성시 ? 대입
 func SubstituteQuery(query string, args []string) string {
 	parts := strings.Split(query, "?")
 	if len(parts)-1 != len(args) {
@@ -32,8 +37,63 @@ func SubstituteQuery(query string, args []string) string {
 	return sb.String()
 }
 
-// BuildInsertQueryAndExecute는 주어진 테이블 이름과 데이터 맵을 기반으로
-// INSERT 쿼리를 생성하고, 전역 DB 객체를 사용하여 실행한 후 결과를 반환
+// HandleError는 주어진 에러를 처리하여 로컬 및 DB 로그를 기록
+func HandleSqlError(c *gin.Context, tx *sql.Tx,
+	sql string, errCode int, errMsg string, errWhere string, err error) {
+
+	if tx != nil {
+		if rbErr := tx.Rollback(); rbErr != nil {
+			// log.Printf("트랜잭션 롤백 실패: %v", rbErr)
+		} else {
+			// log.Println("트랜잭션 롤백 성공")
+		}
+	}
+
+	// log.Printf("에러 발생 (%s): %v", errWhere, err)
+
+	if db.Conn != nil {
+		_, dbErr := db.Conn.Exec(
+			"INSERT INTO _a_error_logs (el_where, el_message, el_sql, el_regi_date) VALUES (?, ?, ?, ?)",
+			errWhere, err.Error(), sql, time.Now(),
+		)
+		if dbErr != nil {
+			// log.Printf("DB 로그 저장 실패: %v", dbErr)
+		}
+	} else {
+		// log.Println("DB 연결이 설정되어 있지 않아 에러 로그를 저장하지 못했습니다.")
+	}
+
+	c.JSON(http.StatusBadRequest, gin.H{"message": errMsg, "errCode": errCode})
+}
+
+// 유효성 검사 실패시 에러 문구리턴
+func FormatValidationErrors(ve v10.ValidationErrors, validateConverts map[string]string) map[string]string {
+	msgs := make(map[string]string, len(ve))
+	for _, fe := range ve {
+		var msg string
+		switch fe.Tag() {
+		case "required":
+			msg = fmt.Sprintf("%s은(는) 필수 항목입니다", validateConverts[fe.Field()])
+		case "min":
+			msg = fmt.Sprintf("%s은(는) 최소 %s글자 이상 입력해주세요", validateConverts[fe.Field()], fe.Param())
+		case "max":
+			msg = fmt.Sprintf("%s은(는) 최대 %s글자 이하로 입력해주세요", validateConverts[fe.Field()], fe.Param())
+		case "email":
+			msg = fmt.Sprintf("%s은(는) 형식이 올바르지 않습니다", validateConverts[fe.Field()])
+		case "alphaunicode":
+			msg = fmt.Sprintf("%s은(는) 영문 또는 한글만 입력해주세요", validateConverts[fe.Field()])
+		case "alpha":
+			msg = fmt.Sprintf("%s은(는) 영문만 입력해주세요", validateConverts[fe.Field()])
+		case "numeric":
+			msg = fmt.Sprintf("%s은(는) 숫자만 입력해주세요", validateConverts[fe.Field()])
+		default:
+			msg = fmt.Sprintln("유효하지 않은 입력입니다")
+		}
+		msgs[fe.Field()] = msg
+	}
+	return msgs
+}
+
 func BuildInsertQuery(c *gin.Context, tx *sql.Tx,
 	tableName string, data map[string]string, errWhere string) (int64, error) {
 
@@ -58,21 +118,19 @@ func BuildInsertQuery(c *gin.Context, tx *sql.Tx,
 	result, err := db.Conn.Exec(query, util.ToInterfaceSlice(args)...)
 	if err != nil {
 		fullQuery := SubstituteQuery(query, args)
-		util.HandleSqlError(c, tx, fullQuery, 0, "요청에 실패했습니다.", errWhere, err)
+		HandleSqlError(c, tx, fullQuery, 0, "요청에 실패했습니다.", errWhere, err)
 		return 0, err
 	}
 
 	insertedID, err := result.LastInsertId()
 	if err != nil {
 		fullQuery := SubstituteQuery(query, args)
-		util.HandleSqlError(c, tx, fullQuery, 0, "요청에 실패했습니다.", errWhere, err)
+		HandleSqlError(c, tx, fullQuery, 0, "요청에 실패했습니다.", errWhere, err)
 		return 0, err
 	}
 	return insertedID, nil
 }
 
-// BuildUpdateQueryAndExecute는 테이블 이름, 업데이트할 데이터, WHERE 조건과 인자를 받아
-// 동적으로 UPDATE 쿼리를 생성하고 전역 DB 객체(DB 변수)를 사용하여 안전하게 실행합
 func BuildUpdateQuery(c *gin.Context, tx *sql.Tx,
 	tableName string, updateData map[string]string, whereClause string, whereArgs []string, errWhere string) (sql.Result, error) {
 
@@ -85,7 +143,6 @@ func BuildUpdateQuery(c *gin.Context, tx *sql.Tx,
 
 	for col, value := range updateData {
 		strVal := value
-		// if strVal, ok := value.(string); ok {
 		// 만약 문자열이 사칙연산 연산자(+=, -=, *=, /=)로 시작하면 처리
 		if strings.HasPrefix(strVal, "+= ") || strings.HasPrefix(strVal, "-= ") ||
 			strings.HasPrefix(strVal, "*= ") || strings.HasPrefix(strVal, "/= ") {
@@ -101,7 +158,6 @@ func BuildUpdateQuery(c *gin.Context, tx *sql.Tx,
 				return nil, fmt.Errorf("invalid operand for column %s: %v", col, err)
 			}
 
-			// 각 연산자별로 SET 절을 구성
 			switch operator {
 			case "+= ":
 				setClauses = append(setClauses, fmt.Sprintf("%s = %s + ?", col, col))
@@ -114,7 +170,6 @@ func BuildUpdateQuery(c *gin.Context, tx *sql.Tx,
 			}
 			args = append(args, operandStr2)
 			continue
-			// }
 		}
 		// 일반 값이라면 그냥 "컬럼 = ?" 형식으로 추가
 		setClauses = append(setClauses, fmt.Sprintf("%s = ?", col))
@@ -124,38 +179,30 @@ func BuildUpdateQuery(c *gin.Context, tx *sql.Tx,
 	// SET 절 구성: "col1 = ?, col2 = ?, ..."
 	setPart := strings.Join(setClauses, ", ")
 
-	// 최종 쿼리 구성: UPDATE 테이블 SET ... WHERE ...
 	query := fmt.Sprintf("UPDATE %s SET %s WHERE %s", tableName, setPart, whereClause)
-
-	// WHERE 인자도 arguments 배열에 추가
 	args = append(args, whereArgs...)
 
-	// 파라미터라이즈드 쿼리 실행 (SQL 인젝션 방지)
 	result, err := db.Conn.Exec(query, util.ToInterfaceSlice(args)...)
 	if err != nil {
 		fullQuery := SubstituteQuery(query, args)
-		util.HandleSqlError(c, tx, fullQuery, 0, "요청에 실패했습니다.", errWhere, err)
+		HandleSqlError(c, tx, fullQuery, 0, "요청에 실패했습니다.", errWhere, err)
 		return nil, err
 	}
 
 	return result, nil
 }
 
-// BuildDeleteQueryAndExecute는 주어진 테이블 이름과 WHERE 조건(절 및 인자)을 기반으로
-// DELETE 쿼리를 생성하여 전역 DB 객체를 사용해 실행한 후 결과를 반환
 func BuildDeleteQuery(c *gin.Context, tx *sql.Tx, tableName string, whereClause string, whereArgs []string, errWhere string) (sql.Result, error) {
-	// DB가 설정되어 있는지 확인
 	if db.Conn == nil {
 		return nil, fmt.Errorf("database connection is not set")
 	}
 
-	// DELETE 쿼리 생성: 테이블 이름과 WHERE 조건을 사용하여 동적으로 쿼리 구성
 	query := fmt.Sprintf("DELETE FROM %s WHERE %s", tableName, whereClause)
 
-	// parameterized query 방식으로 쿼리 실행 (SQL 인젝션 방지)
+	// parameterized query 방식
 	result, err := db.Conn.Exec(query, util.ToInterfaceSlice(whereArgs)...)
 	if err != nil {
-		util.HandleSqlError(c, tx, query, 0, "요청에 실패했습니다.", errWhere, err)
+		HandleSqlError(c, tx, query, 0, "요청에 실패했습니다.", errWhere, err)
 		return nil, err
 	}
 
