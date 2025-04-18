@@ -17,7 +17,6 @@ import (
 
 // ValidateModel은 전달받은 model에 대해 유효성 검사를 실행
 // 모델은 validate 태그가 지정된 Exported 필드들을 가져야함
-
 func ValidateModel(model interface{}) error {
 	return getValidator().Struct(model)
 }
@@ -98,6 +97,7 @@ func FormatValidationErrors(ve v10.ValidationErrors, validateConverts map[string
 	return msgs
 }
 
+// 유효성 검사 실패 통합 트랜잭션 롤백, 에러문구까지 출력
 func HandleValidationError(c *gin.Context, tx *sql.Tx, err error, converts map[string]string) bool {
 	if err == nil {
 		return false
@@ -115,6 +115,55 @@ func HandleValidationError(c *gin.Context, tx *sql.Tx, err error, converts map[s
 		c.JSON(http.StatusBadRequest, gin.H{"errors": msgs})
 	}
 	return true
+}
+
+func BuildSelectQuery(c *gin.Context, tx *sql.Tx,
+	query string, args []string, errWhere string) ([]map[string]string, error) {
+
+	if db.Conn == nil {
+		return nil, fmt.Errorf("database connection is not set")
+	}
+
+	// 문자열 슬라이스 → interface{} 슬라이스로 변환
+	interArgs := util.ToInterfaceSlice(args)
+
+	rows, err := db.Conn.Query(query, interArgs...)
+	if err != nil {
+		fullQuery := SubstituteQuery(query, args)
+		HandleSqlError(c, tx, fullQuery, 0, "요청에 실패했습니다.", errWhere, err)
+		return nil, err
+	}
+	defer rows.Close()
+
+	cols, err := rows.Columns()
+	if err != nil {
+		fullQuery := SubstituteQuery(query, args)
+		HandleSqlError(c, tx, fullQuery, 0, "요청에 실패했습니다.", errWhere, err)
+		return nil, err
+	}
+
+	var results []map[string]string
+
+	for rows.Next() {
+		values := make([]string, len(cols))
+		ptrs := make([]interface{}, len(cols))
+		for i := range values {
+			ptrs[i] = &values[i]
+		}
+
+		if err := rows.Scan(ptrs...); err != nil {
+			fullQuery := SubstituteQuery(query, args)
+			HandleSqlError(c, tx, fullQuery, 0, "요청에 실패했습니다.", errWhere, err)
+			return nil, err
+		}
+		rowMap := make(map[string]string, len(cols))
+		for i, col := range cols {
+			rowMap[col] = values[i]
+		}
+		results = append(results, rowMap)
+	}
+
+	return results, nil
 }
 
 func BuildInsertQuery(c *gin.Context, tx *sql.Tx,
