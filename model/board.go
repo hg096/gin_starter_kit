@@ -13,7 +13,7 @@ import (
 // string `db:"" validate:","`
 // required 필수 / alphanum 알파벳과 숫자만 / min=6 최소 6 / max=32 최대 32 / alphaunicode 공백 없이 영문 또는 한글 / alpha 알파벳만 / email 이메일 / numeric 숫자 형식만 / gt / gte / lt / lte / len=10 정확한 길이 / regexp=^[a-zA-Z0-9]*$ 정규식으로 패턴 / eqfield=PasswordConfirm 다른 필드와 값이 동일한지
 
-type UserInsert struct {
+type UserBInsert struct {
 	core.BaseModel
 	id               string `db:"u_id"`
 	pass             string `db:"u_pass" validate:"min=6,max=20,required"`
@@ -22,7 +22,7 @@ type UserInsert struct {
 	ValidateConverts map[string]string
 	TableName        string
 }
-type UserUpdate struct {
+type UserBUpdate struct {
 	core.BaseModel
 	id               string `db:"u_id"`
 	pass             string `db:"u_pass" validate:"omitempty,min=6,max=20"`
@@ -32,8 +32,8 @@ type UserUpdate struct {
 	TableName        string
 }
 
-func NewUser() *UserInsert {
-	return &UserInsert{
+func NewBUser() *UserBInsert {
+	return &UserBInsert{
 		BaseModel: core.NewBaseModel(),
 		ValidateConverts: map[string]string{
 			"id":    "아이디",
@@ -44,8 +44,8 @@ func NewUser() *UserInsert {
 		TableName: "_user",
 	}
 }
-func NewUpUser() *UserUpdate {
-	return &UserUpdate{
+func NewBUpUser() *UserBUpdate {
+	return &UserBUpdate{
 		BaseModel: core.NewBaseModel(),
 		ValidateConverts: map[string]string{
 			"id":    "아이디",
@@ -57,7 +57,7 @@ func NewUpUser() *UserUpdate {
 	}
 }
 
-func (u *UserInsert) Insert(c *gin.Context, tx *sql.Tx,
+func (u *UserBInsert) Insert(c *gin.Context, tx *sql.Tx,
 	data map[string]string, errWhere string) (int64, error, error) {
 
 	fieldMap := map[string]*string{
@@ -90,7 +90,7 @@ func (u *UserInsert) Insert(c *gin.Context, tx *sql.Tx,
 	return insertedID, nil, nil
 }
 
-func (u *UserUpdate) Update(c *gin.Context, tx *sql.Tx,
+func (u *UserBUpdate) Update(c *gin.Context, tx *sql.Tx,
 	data map[string]string, where string, whereData []string, errWhere string) (error, error) {
 
 	fieldMap := map[string]*string{

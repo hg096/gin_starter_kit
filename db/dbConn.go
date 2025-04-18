@@ -23,7 +23,7 @@ func InitDB() {
 	DB_PORT := os.Getenv("DB_PORT")
 	DB_NAME := os.Getenv("DB_NAME")
 
-	// DSN 예시: "username:password@tcp(127.0.0.1:3306)/dbname?charset=utf8&parseTime=True&loc=Local"
+	// DSN 예시: "username:password@tcp(127.0.0.1:3306)/db_name?charset=utf8&parseTime=True&loc=Local"
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local", DB_USER, DB_PASS, DB_HOST, DB_PORT, DB_NAME)
 
 	var err error

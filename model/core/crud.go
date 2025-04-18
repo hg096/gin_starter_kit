@@ -2,6 +2,7 @@ package core
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"gin_starter/db"
 	"gin_starter/util"
@@ -67,8 +68,8 @@ func HandleSqlError(c *gin.Context, tx *sql.Tx,
 }
 
 // 유효성 검사 실패시 에러 문구리턴
-func FormatValidationErrors(ve v10.ValidationErrors, validateConverts map[string]string) map[string]string {
-	msgs := make(map[string]string, len(ve))
+func FormatValidationErrors(ve v10.ValidationErrors, validateConverts map[string]string) map[string]map[string]string {
+	msgs := make(map[string]map[string]string, len(ve))
 	for _, fe := range ve {
 		var msg string
 		switch fe.Tag() {
@@ -79,7 +80,7 @@ func FormatValidationErrors(ve v10.ValidationErrors, validateConverts map[string
 		case "max":
 			msg = fmt.Sprintf("%s은(는) 최대 %s글자 이하로 입력해주세요", validateConverts[fe.Field()], fe.Param())
 		case "email":
-			msg = fmt.Sprintf("%s은(는) 형식이 올바르지 않습니다", validateConverts[fe.Field()])
+			msg = fmt.Sprintf("%s은(는) 이메일 형식이 올바르지 않습니다", validateConverts[fe.Field()])
 		case "alphaunicode":
 			msg = fmt.Sprintf("%s은(는) 영문 또는 한글만 입력해주세요", validateConverts[fe.Field()])
 		case "alpha":
@@ -89,9 +90,31 @@ func FormatValidationErrors(ve v10.ValidationErrors, validateConverts map[string
 		default:
 			msg = fmt.Sprintln("유효하지 않은 입력입니다")
 		}
-		msgs[fe.Field()] = msg
+		msgs[fe.Field()]["massage"] = msg
+		msgs[fe.Field()]["field"] = fe.Field()
+		msgs[fe.Field()]["tag"] = fe.Tag()
+		msgs[fe.Field()]["param"] = fe.Param()
 	}
 	return msgs
+}
+
+func HandleValidationError(c *gin.Context, tx *sql.Tx, err error, converts map[string]string) bool {
+	if err == nil {
+		return false
+	}
+	// 트랜잭션 롤백
+	if tx != nil {
+		if rbErr := tx.Rollback(); rbErr != nil {
+			c.Error(rbErr) // 로깅 용으로 Gin에 에러 등록
+		}
+	}
+	// validator 에러인지 검사
+	var ve v10.ValidationErrors
+	if errors.As(err, &ve) {
+		msgs := FormatValidationErrors(ve, converts)
+		c.JSON(http.StatusBadRequest, gin.H{"errors": msgs})
+	}
+	return true
 }
 
 func BuildInsertQuery(c *gin.Context, tx *sql.Tx,

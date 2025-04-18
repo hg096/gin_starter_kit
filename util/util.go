@@ -26,6 +26,7 @@ func ToInterfaceSlice(strs []string) []interface{} {
 	return result
 }
 
+// 빈값체크
 func Empty(v interface{}) bool {
 	if v == nil {
 		return false
@@ -39,7 +40,7 @@ var (
 )
 
 // GetInstance는 Util의 싱글톤 인스턴스를 반환
-// 여러 고루틴에서 동시에 호출해도 once.Do에 의해 단 한 번만 생성
+// 여러 고루틴에서 동시에 호출해도 once.Do에 의해 단 한번만 생성
 func GetInstance() *Util {
 	once.Do(func() {
 		instance = &Util{}

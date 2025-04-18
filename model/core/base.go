@@ -3,23 +3,26 @@ package core
 import (
 	"sync"
 
-	"github.com/go-playground/validator/v10"
+	// "github.com/go-playground/validator/v10"
+	v10 "github.com/go-playground/validator/v10"
 )
 
 // 모든 모델이 임베딩할 수 있는 베이스 구조체
 type BaseModel struct {
-	validate *validator.Validate
+	validate *v10.Validate
 }
 
 var (
-	baseValidator *validator.Validate
+	baseValidator *v10.Validate
 	once          sync.Once
 )
 
+var Ve v10.ValidationErrors
+
 // 싱글톤 형태의 validator 인스턴스를 생성 및 반환
-func getValidator() *validator.Validate {
+func getValidator() *v10.Validate {
 	once.Do(func() {
-		baseValidator = validator.New()
+		baseValidator = v10.New()
 	})
 	return baseValidator
 }
