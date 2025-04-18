@@ -146,12 +146,8 @@ func BuildSelectQuery(c *gin.Context, tx *sql.Tx,
 
 	for rows.Next() {
 		values := make([]string, len(cols))
-		ptrs := make([]interface{}, len(cols))
-		for i := range values {
-			ptrs[i] = &values[i]
-		}
 
-		if err := rows.Scan(ptrs...); err != nil {
+		if err := rows.Scan(util.ToInterfaceSlice(values)...); err != nil {
 			fullQuery := SubstituteQuery(query, args)
 			HandleSqlError(c, tx, fullQuery, 0, "요청에 실패했습니다.", errWhere, err)
 			return nil, err
