@@ -106,7 +106,7 @@ func (u *UserBUpdate) Update(c *gin.Context, tx *sql.Tx,
 		return err, nil
 	}
 
-	if !util.Empty(data["u_pass"]) {
+	if !util.EmptyString(data["u_pass"]) {
 		pass := data["u_pass"]
 		hashedPass, err := bcrypt.GenerateFromPassword([]byte(pass), bcrypt.DefaultCost)
 		if err != nil {

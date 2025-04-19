@@ -1,7 +1,6 @@
 package util
 
 import (
-	"reflect"
 	"sync"
 )
 
@@ -27,11 +26,34 @@ func ToInterfaceSlice(strs []string) []interface{} {
 }
 
 // 빈값체크
-func Empty(v interface{}) bool {
-	if v == nil {
-		return false
-	}
-	return reflect.ValueOf(v).IsZero()
+type Numeric interface {
+	~int | ~int8 | ~int16 | ~int32 | ~int64 |
+		~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~uintptr |
+		~float32 | ~float64
+}
+
+func EmptyNumber[T Numeric](v T) bool {
+	return v == 0
+}
+
+func EmptyString(s string) bool {
+	return s == ""
+}
+
+func EmptyBool(b bool) bool {
+	return !b
+}
+
+func EmptySlice[T any](sl []T) bool {
+	return len(sl) == 0
+}
+
+func EmptyMap[K comparable, V any](m map[K]V) bool {
+	return len(m) == 0
+}
+
+func EmptyPtr[T any](p *T) bool {
+	return p == nil
 }
 
 var (
