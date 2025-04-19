@@ -20,8 +20,14 @@ func SetupRoutes(r *gin.Engine) {
 	{
 		// /api/user 라우트 등록
 		api.SetupUserRoutes(apiGroup)
+
 		// /api/blog 라우트 등록
 		api.SetupBlogRoutes(apiGroup)
+
+		// apiGroup.Use(auth.JWTAuthMiddleware())
+		// {
+
+		// }
 	}
 
 	outGroup := r.Group("/out")

@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"gin_starter/model"
+	"gin_starter/util/auth"
 
 	"github.com/gin-gonic/gin"
 )
@@ -66,10 +67,45 @@ func SetupUserRoutes(rg *gin.RouterGroup) {
 			c.JSON(http.StatusOK, gin.H{"message": "User update"})
 		})
 
-		userGroup.GET("/:id", func(c *gin.Context) {
-			id := c.Param("id")
-			c.JSON(http.StatusOK, gin.H{"message": "User detail", "id": id})
+		userGroup.GET("/logIn", func(c *gin.Context) {
+
+			// user := model.NewUser()
+
+			data := map[string]string{
+				"u_id":    "Alice",
+				"u_pass":  "Ali",
+				"u_name":  "Alice",
+				"u_email": "alice@example.com",
+			}
+
+			// insertedID, valErr, sqlErr := user.Insert(c, nil, data, "api/user/make")
+			// if valErr != nil || sqlErr != nil {
+			// 	log.Printf("User Insert 에러: %v", valErr)
+			// 	return
+			// }
+
+			at, rt, err := auth.GenerateTokens(data["u_id"])
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"message": "token 생성 실패"})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"message": "User login", "access_token": at, "refresh_token": rt})
 		})
+
+		userGroup.GET("/refresh", auth.RefreshHandler)
+
+		userGroup.Use(auth.JWTAuthMiddleware(""))
+		{
+			userGroup.GET("/profile", func(c *gin.Context) {
+				uid := c.GetString("user_id")
+				c.JSON(200, gin.H{"user": uid})
+			})
+		}
+
+		// userGroup.GET("/:id", func(c *gin.Context) {
+		// 	id := c.Param("id")
+		// 	c.JSON(http.StatusOK, gin.H{"message": "User detail", "id": id})
+		// })
 
 	}
 }
