@@ -5,6 +5,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	"gin_starter/model/core"
 	"io"
 	"log"
 	"strings"
@@ -235,7 +236,7 @@ func RefreshHandler(c *gin.Context) {
 }
 
 // 미들웨어 엑세스 토큰 검증
-func JWTAuthMiddleware(lv string) gin.HandlerFunc {
+func JWTAuthMiddleware(lv int) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		h := c.GetHeader("Authorization")
 		parts := strings.SplitN(h, " ", 2)
@@ -249,6 +250,20 @@ func JWTAuthMiddleware(lv string) gin.HandlerFunc {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"message": "invalid token", "TOKEN": "R"})
 			return
 		}
+
+		if lv > 0 {
+			result, err := core.BuildSelectQuery(c, nil, "select u_auth_type, u_auth_level from _user where u_id = ? ", []string{claims.UserID}, "JWTAuthMiddleware.err")
+			if err != nil {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"message": "invalid user"})
+				return
+			}
+			u_auth_level, _ := strconv.Atoi(result[0]["u_auth_level"])
+			if lv > u_auth_level {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"message": "invalid user"})
+				return
+			}
+		}
+
 		c.Set("user_id", claims.UserID)
 		c.Next()
 	}

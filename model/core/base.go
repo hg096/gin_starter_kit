@@ -17,8 +17,6 @@ var (
 	once          sync.Once
 )
 
-var Ve v10.ValidationErrors
-
 // 싱글톤 형태의 validator 인스턴스를 생성 및 반환
 func getValidator() *v10.Validate {
 	once.Do(func() {
