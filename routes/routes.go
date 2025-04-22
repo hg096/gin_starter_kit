@@ -3,7 +3,11 @@ package routes
 import (
 	"net/http"
 
+	_ "gin_starter/docs" // docs 폴더 import (자동 생성된 문서)
+
 	"github.com/gin-gonic/gin"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 
 	"gin_starter/routes/api"
 	"gin_starter/routes/out"
@@ -11,6 +15,8 @@ import (
 
 // SetupRoutes 함수는 전달받은 gin.Engine에 모든 라우트를 등록
 func SetupRoutes(r *gin.Engine) {
+
+	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	r.GET("/", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"message": "home"})
