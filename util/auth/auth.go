@@ -173,9 +173,9 @@ func DecryptAESGCM(key, cipherData []byte) ([]byte, error) {
 }
 
 // GenerateTokens은 userID로 액세스/리프레시 토큰을 생성해 반환합니다.
-func GenerateTokens(userID string) (accessToken, refreshToken string, err error) {
+func GenerateTokens(userID string) (accessToken string, refreshToken string, err error) {
 	// 액세스 토큰 만료(분)
-	accessExpMin := 60
+	accessExpMin := 30
 	if v := os.Getenv("JWT_EXPIRES_IN"); v != "" {
 		if m, err := strconv.Atoi(v); err == nil {
 			accessExpMin = m
@@ -221,12 +221,23 @@ func RefreshHandler(c *gin.Context) {
 		return
 	}
 
-	// (선택) DB나 캐시에서 이 리프레시 토큰이 유효한지 재검증 → 탈취 방지
+	// 디비 검증
+	resultUser, err := core.BuildSelectQuery(c, nil, "select u_re_token from _user where u_re_token = ? ", []string{req.RefreshToken}, "RefreshHandler.err")
+	if err != nil || util.EmptyString(resultUser[0]["u_re_token"]) {
+		util.EndResponse(c, http.StatusBadRequest, gin.H{}, "fn auth/RefreshHandler-BuildSelectQuery")
+		return
+	}
 
 	// 2) 새 토큰 생성
 	newAT, newRT, err := GenerateTokens(claims.UserID)
 	if err != nil {
 		util.EndResponse(c, http.StatusBadRequest, gin.H{}, "fn auth/RefreshHandler-GenerateTokens")
+		return
+	}
+
+	_, err = core.BuildUpdateQuery(c, nil, "_user", map[string]string{"u_re_token": newRT}, "u_re_token = ?", []string{req.RefreshToken}, "fn auth/RefreshHandler-BuildUpdateQuery")
+	if err != nil {
+		util.EndResponse(c, http.StatusBadRequest, gin.H{}, "fn auth/RefreshHandler-BuildUpdateQuery")
 		return
 	}
 
@@ -236,7 +247,7 @@ func RefreshHandler(c *gin.Context) {
 	}, "fn auth/RefreshHandler-end")
 }
 
-// 미들웨어 엑세스 토큰 검증
+// 미들웨어 엑세스 토큰 검증 - 사용자 타입, 레벨
 func JWTAuthMiddleware(userType string, lv int) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		h := c.GetHeader("Authorization")
