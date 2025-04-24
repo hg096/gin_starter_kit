@@ -31,6 +31,8 @@ func SetupRoutes(r *gin.Engine) {
 		// /api/blog 라우트 등록
 		api.SetupBlogRoutes(apiGroup)
 
+		out.SetupOutRoutes(apiGroup)
+
 		// apiGroup.Use(auth.JWTAuthMiddleware("U", 0))
 		// {
 

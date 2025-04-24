@@ -173,7 +173,7 @@ func DecryptAESGCM(key, cipherData []byte) ([]byte, error) {
 }
 
 // GenerateTokens은 userID로 액세스/리프레시 토큰을 생성해 반환
-func GenerateTokens(userID string) (accessToken string, refreshToken string, err error) {
+func GenerateTokens(userID string, refreshTokenPrev string) (accessToken string, refreshToken string, err error) {
 	// 액세스 토큰 만료(분)
 	accessExpMin := 30
 	if v := os.Getenv("JWT_EXPIRES_IN"); v != "" {
@@ -194,6 +194,15 @@ func GenerateTokens(userID string) (accessToken string, refreshToken string, err
 			refreshExpMin = 60 * 24 * d
 		}
 	}
+
+	if refreshTokenPrev != "" {
+		if claims, err := ValidateToken(refreshTokenPrev, RefreshSecret, TokenSecret); err == nil {
+			if time.Until(claims.ExpiresAt.Time) >= 24*time.Hour {
+				return accessToken, refreshTokenPrev, nil
+			}
+		}
+	}
+
 	refreshToken, err = NewEncryptedToken(userID, refreshExpMin, RefreshSecret, TokenSecret)
 	// refreshToken, err = rt.SignedString(RefreshSecret)
 	if err != nil {
@@ -228,7 +237,7 @@ func RefreshHandler(c *gin.Context) {
 	}
 
 	// 2) 새 토큰 생성
-	newAT, newRT, err := GenerateTokens(claims.UserID)
+	newAT, newRT, err := GenerateTokens(claims.UserID, req.RefreshToken)
 	if err != nil {
 		util.EndResponse(c, http.StatusBadRequest, gin.H{}, "fn auth/RefreshHandler-GenerateTokens")
 		return
