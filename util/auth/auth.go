@@ -6,6 +6,7 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"gin_starter/model/core"
+	"gin_starter/util"
 	"io"
 	"log"
 	"strings"
@@ -42,10 +43,10 @@ var (
 
 func init() {
 	if len(AccessSecret) != 32 || len(RefreshSecret) != 32 || len(TokenSecret) != 32 {
-		log.Fatal("JWT_SECRET, JWT_REFRESH_SECRET, JWT_TOKEN_SECRET 는 32자여야 합니다")
+		log.Fatal("[종료] JWT_SECRET, JWT_REFRESH_SECRET, JWT_TOKEN_SECRET 는 32자여야 합니다")
 	}
 	if len(AccessSecret) == 0 || len(RefreshSecret) == 0 || len(TokenSecret) == 0 {
-		log.Fatal("JWT_SECRET, JWT_REFRESH_SECRET 모두 설정 필요")
+		log.Fatal("[종료] JWT_SECRET, JWT_REFRESH_SECRET 모두 설정 필요")
 	}
 }
 
@@ -209,14 +210,14 @@ func RefreshHandler(c *gin.Context) {
 		RefreshToken string `json:"refresh_token" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"message": "refresh_token 필수"})
+		util.EndResponse(c, http.StatusBadRequest, gin.H{}, "fn auth/RefreshHandler")
 		return
 	}
 
 	// 1) 리프레시 토큰 검증
 	claims, err := ValidateToken(req.RefreshToken, RefreshSecret, TokenSecret)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"message": "invalid refresh token"})
+		util.EndResponse(c, http.StatusBadRequest, gin.H{}, "fn auth/RefreshHandler-ValidateToken")
 		return
 	}
 
@@ -225,41 +226,47 @@ func RefreshHandler(c *gin.Context) {
 	// 2) 새 토큰 생성
 	newAT, newRT, err := GenerateTokens(claims.UserID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"message": "토큰 생성 실패"})
+		util.EndResponse(c, http.StatusBadRequest, gin.H{}, "fn auth/RefreshHandler-GenerateTokens")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	util.EndResponse(c, http.StatusOK, gin.H{
 		"access_token":  newAT,
 		"refresh_token": newRT,
-	})
+	}, "fn auth/RefreshHandler-end")
 }
 
 // 미들웨어 엑세스 토큰 검증
-func JWTAuthMiddleware(lv int) gin.HandlerFunc {
+func JWTAuthMiddleware(userType string, lv int) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		h := c.GetHeader("Authorization")
 		parts := strings.SplitN(h, " ", 2)
 		if len(parts) != 2 || parts[0] != "Bearer" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"message": "invalid token", "TOKEN": "N"})
+			util.EndResponse(c, http.StatusBadRequest, gin.H{"TOKEN": "N"}, "fn auth/JWTAuthMiddleware")
 			return
 		}
 
 		claims, err := ValidateToken(parts[1], AccessSecret, TokenSecret)
 		if err != nil {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"message": "invalid token", "TOKEN": "R"})
+			util.EndResponse(c, http.StatusBadRequest, gin.H{"TOKEN": "R"}, "fn auth/JWTAuthMiddleware-ValidateToken")
 			return
 		}
 
 		if lv > 0 {
 			result, err := core.BuildSelectQuery(c, nil, "select u_auth_type, u_auth_level from _user where u_id = ? ", []string{claims.UserID}, "JWTAuthMiddleware.err")
 			if err != nil {
-				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"message": "invalid user"})
+				util.EndResponse(c, http.StatusBadRequest, gin.H{}, "fn auth/JWTAuthMiddleware-BuildSelectQuery")
 				return
 			}
+
+			if result[0]["u_auth_type"] != userType {
+				util.EndResponse(c, http.StatusBadRequest, gin.H{}, "fn auth/JWTAuthMiddleware-type")
+				return
+			}
+
 			u_auth_level, _ := strconv.Atoi(result[0]["u_auth_level"])
 			if lv > u_auth_level {
-				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"message": "invalid user"})
+				util.EndResponse(c, http.StatusBadRequest, gin.H{}, "fn auth/JWTAuthMiddleware-level")
 				return
 			}
 		}

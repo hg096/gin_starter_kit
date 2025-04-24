@@ -36,6 +36,4 @@ func InitDB() {
 	}
 	log.Println("MySQL 연결 성공")
 
-	// core 패키지 내 전역 DB 변수 설정
-	// core.SetDB(Conn)
 }

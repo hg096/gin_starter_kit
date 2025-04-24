@@ -2,10 +2,26 @@ package util
 
 import (
 	"sync"
+
+	"github.com/gin-gonic/gin"
 )
 
 // Util 구조체는 유틸리티 함수들을 포함
 type Util struct{}
+
+var (
+	instance *Util     // 싱글톤 인스턴스
+	once     sync.Once // instance 생성에 대한 동기화를 담당
+)
+
+// GetInstance는 Util의 싱글톤 인스턴스를 반환
+// 여러 고루틴에서 동시에 호출해도 once.Do에 의해 단 한번만 생성
+func GetInstance() *Util {
+	once.Do(func() {
+		instance = &Util{}
+	})
+	return instance
+}
 
 // AssignStringFields는 data map에서 값이 문자열인 경우, fieldMap에 지정된 포인터 변수에 대입
 func AssignStringFields(data map[string]string, fieldMap map[string]*string) {
@@ -56,16 +72,23 @@ func EmptyPtr[T any](p *T) bool {
 	return p == nil
 }
 
-var (
-	instance *Util     // 싱글톤 인스턴스
-	once     sync.Once // instance 생성에 대한 동기화를 담당
-)
+func EndResponse(c *gin.Context, status int, jsonObj any, debug string) {
 
-// GetInstance는 Util의 싱글톤 인스턴스를 반환
-// 여러 고루틴에서 동시에 호출해도 once.Do에 의해 단 한번만 생성
-func GetInstance() *Util {
-	once.Do(func() {
-		instance = &Util{}
-	})
-	return instance
+	var body gin.H
+
+	switch m := jsonObj.(type) {
+	case gin.H:
+		body = m
+	case map[string]interface{}:
+		body = gin.H(m)
+	default:
+		// 기타 타입이면 data 필드로 래핑
+		body = gin.H{"data": m}
+	}
+
+	if gin.Mode() != gin.ReleaseMode {
+		body["messageDebug"] = debug
+	}
+
+	c.AbortWithStatusJSON(status, body)
 }

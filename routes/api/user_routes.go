@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"gin_starter/model"
+	"gin_starter/util"
 	"gin_starter/util/auth"
 
 	"github.com/gin-gonic/gin"
@@ -20,7 +21,7 @@ func SetupUserRoutes(rg *gin.RouterGroup) {
 
 		userGroup.GET("/", func(c *gin.Context) {
 			fmt.Println(" Hello, Alice")
-			c.JSON(http.StatusOK, gin.H{"message": "User list"})
+			util.EndResponse(c, http.StatusOK, gin.H{"message": "User list"}, "rest /user")
 		})
 
 		userGroup.GET("/make", func(c *gin.Context) {
@@ -42,7 +43,7 @@ func SetupUserRoutes(rg *gin.RouterGroup) {
 
 			fmt.Printf("User가 성공적으로 추가 되었습니다. Inserted ID: %d\n", insertedID)
 
-			c.JSON(http.StatusOK, gin.H{"message": "User make"})
+			util.EndResponse(c, http.StatusOK, gin.H{"message": "User make"}, "rest /user/make")
 		})
 
 		userGroup.GET("/makeUp", func(c *gin.Context) {
@@ -64,7 +65,7 @@ func SetupUserRoutes(rg *gin.RouterGroup) {
 				// fmt.Printf("User가 성공적으로 수정 되었습니다. Inserted ID: %s\n", sqlResult)
 			}
 
-			c.JSON(http.StatusOK, gin.H{"message": "User update"})
+			util.EndResponse(c, http.StatusOK, gin.H{"message": "User update"}, "rest /user/makeUp")
 		})
 
 		userGroup.GET("/logIn", func(c *gin.Context) {
@@ -86,20 +87,20 @@ func SetupUserRoutes(rg *gin.RouterGroup) {
 
 			at, rt, err := auth.GenerateTokens(data["u_id"])
 			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"message": "token 생성 실패"})
+				util.EndResponse(c, http.StatusBadRequest, gin.H{}, "rest /user/login-GenerateTokens")
 				return
 			}
 
-			c.JSON(http.StatusOK, gin.H{"message": "User login", "access_token": at, "refresh_token": rt})
+			util.EndResponse(c, http.StatusOK, gin.H{"access_token": at, "refresh_token": rt}, "rest /user/login")
 		})
 
 		userGroup.GET("/refresh", auth.RefreshHandler)
 
-		// userGroup.Use(auth.JWTAuthMiddleware(0))
+		// userGroup.Use(auth.JWTAuthMiddleware("U", 0))
 		// {
-		userGroup.GET("/profile", auth.JWTAuthMiddleware(0), func(c *gin.Context) {
+		userGroup.GET("/profile", auth.JWTAuthMiddleware("U", 0), func(c *gin.Context) {
 			uid := c.GetString("user_id")
-			c.JSON(200, gin.H{"user": uid})
+			util.EndResponse(c, 200, gin.H{"user": uid}, "rest /user/profile")
 		})
 		// }
 

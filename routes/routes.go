@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	_ "gin_starter/docs" // docs 폴더 import (자동 생성된 문서)
+	"gin_starter/util"
 
 	"github.com/gin-gonic/gin"
 	swaggerFiles "github.com/swaggo/files"
@@ -19,7 +20,7 @@ func SetupRoutes(r *gin.Engine) {
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	r.GET("/", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"message": "home"})
+		util.EndResponse(c, http.StatusOK, gin.H{"message": "home"}, "rest /")
 	})
 
 	apiGroup := r.Group("/api")
@@ -30,7 +31,7 @@ func SetupRoutes(r *gin.Engine) {
 		// /api/blog 라우트 등록
 		api.SetupBlogRoutes(apiGroup)
 
-		// apiGroup.Use(auth.JWTAuthMiddleware(0))
+		// apiGroup.Use(auth.JWTAuthMiddleware("U", 0))
 		// {
 
 		// }

@@ -39,7 +39,7 @@ func SubstituteQuery(query string, args []string) string {
 
 // HandleError는 주어진 에러를 처리하여 로컬 및 DB 로그를 기록
 func HandleSqlError(c *gin.Context, tx *sql.Tx,
-	sql string, errCode int, errMsg string, errWhere string, err error) {
+	sql string, errCode int, errWhere string, err error) {
 
 	if tx != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
@@ -63,7 +63,7 @@ func HandleSqlError(c *gin.Context, tx *sql.Tx,
 		// log.Println("DB 연결이 설정되어 있지 않아 에러 로그를 저장하지 못했습니다.")
 	}
 
-	c.JSON(http.StatusBadRequest, gin.H{"message": errMsg, "errCode": errCode})
+	util.EndResponse(c, http.StatusBadRequest, gin.H{"errCode": errCode}, "fn crud/HandleSqlError")
 }
 
 // 유효성 검사 실패시 에러 문구리턴
@@ -112,7 +112,7 @@ func HandleValidationError(c *gin.Context, tx *sql.Tx, err error, converts map[s
 	var ve v10.ValidationErrors
 	if errors.As(err, &ve) {
 		msgs := FormatValidationErrors(ve, converts)
-		c.JSON(http.StatusBadRequest, gin.H{"errors": msgs})
+		util.EndResponse(c, http.StatusBadRequest, gin.H{"errors": msgs}, "fn crud/HandleValidationError")
 	}
 	return true
 }
@@ -130,7 +130,7 @@ func BuildSelectQuery(c *gin.Context, tx *sql.Tx,
 	rows, err := db.Conn.Query(query, interArgs...)
 	if err != nil {
 		fullQuery := SubstituteQuery(query, args)
-		HandleSqlError(c, tx, fullQuery, 0, "요청에 실패했습니다.", errWhere, err)
+		HandleSqlError(c, tx, fullQuery, 0, errWhere, err)
 		return nil, err
 	}
 	defer rows.Close()
@@ -138,7 +138,7 @@ func BuildSelectQuery(c *gin.Context, tx *sql.Tx,
 	cols, err := rows.Columns()
 	if err != nil {
 		fullQuery := SubstituteQuery(query, args)
-		HandleSqlError(c, tx, fullQuery, 0, "요청에 실패했습니다.", errWhere, err)
+		HandleSqlError(c, tx, fullQuery, 0, errWhere, err)
 		return nil, err
 	}
 
@@ -149,7 +149,7 @@ func BuildSelectQuery(c *gin.Context, tx *sql.Tx,
 
 		if err := rows.Scan(util.ToInterfaceSlice(values)...); err != nil {
 			fullQuery := SubstituteQuery(query, args)
-			HandleSqlError(c, tx, fullQuery, 0, "요청에 실패했습니다.", errWhere, err)
+			HandleSqlError(c, tx, fullQuery, 0, errWhere, err)
 			return nil, err
 		}
 		rowMap := make(map[string]string, len(cols))
@@ -186,14 +186,14 @@ func BuildInsertQuery(c *gin.Context, tx *sql.Tx,
 	result, err := db.Conn.Exec(query, util.ToInterfaceSlice(args)...)
 	if err != nil {
 		fullQuery := SubstituteQuery(query, args)
-		HandleSqlError(c, tx, fullQuery, 0, "요청에 실패했습니다.", errWhere, err)
+		HandleSqlError(c, tx, fullQuery, 0, errWhere, err)
 		return 0, err
 	}
 
 	insertedID, err := result.LastInsertId()
 	if err != nil {
 		fullQuery := SubstituteQuery(query, args)
-		HandleSqlError(c, tx, fullQuery, 0, "요청에 실패했습니다.", errWhere, err)
+		HandleSqlError(c, tx, fullQuery, 0, errWhere, err)
 		return 0, err
 	}
 	return insertedID, nil
@@ -253,7 +253,7 @@ func BuildUpdateQuery(c *gin.Context, tx *sql.Tx,
 	result, err := db.Conn.Exec(query, util.ToInterfaceSlice(args)...)
 	if err != nil {
 		fullQuery := SubstituteQuery(query, args)
-		HandleSqlError(c, tx, fullQuery, 0, "요청에 실패했습니다.", errWhere, err)
+		HandleSqlError(c, tx, fullQuery, 0, errWhere, err)
 		return nil, err
 	}
 
@@ -270,7 +270,7 @@ func BuildDeleteQuery(c *gin.Context, tx *sql.Tx, tableName string, whereClause 
 	// parameterized query 방식
 	result, err := db.Conn.Exec(query, util.ToInterfaceSlice(whereArgs)...)
 	if err != nil {
-		HandleSqlError(c, tx, query, 0, "요청에 실패했습니다.", errWhere, err)
+		HandleSqlError(c, tx, query, 0, errWhere, err)
 		return nil, err
 	}
 

@@ -76,7 +76,7 @@ func (u *UserInsert) Insert(c *gin.Context, tx *sql.Tx,
 	pass := data["u_pass"]
 	hashedPass, err := bcrypt.GenerateFromPassword([]byte(pass), bcrypt.DefaultCost)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"message": "요청에 실패했습니다.", "errCode": 0})
+		util.EndResponse(c, http.StatusBadRequest, gin.H{"errCode": 0}, "fn user/Insert")
 		return 0, err, nil
 	}
 	data["u_pass"] = string(hashedPass)
