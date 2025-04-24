@@ -260,7 +260,8 @@ func BuildUpdateQuery(c *gin.Context, tx *sql.Tx,
 	return result, nil
 }
 
-func BuildDeleteQuery(c *gin.Context, tx *sql.Tx, tableName string, whereClause string, whereArgs []string, errWhere string) (sql.Result, error) {
+func BuildDeleteQuery(c *gin.Context, tx *sql.Tx,
+	tableName string, whereClause string, whereArgs []string, errWhere string) (sql.Result, error) {
 	if db.Conn == nil {
 		return nil, fmt.Errorf("database connection is not set")
 	}

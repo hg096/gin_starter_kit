@@ -115,6 +115,7 @@ func (u *UserUpdate) Update(c *gin.Context, tx *sql.Tx,
 		data["u_pass"] = string(hashedPass)
 	}
 	delete(data, "u_id")
+	delete(data, "u_auth_type")
 
 	_, err = core.BuildUpdateQuery(c, tx, u.TableName, data, where, whereData, errWhere)
 	if err != nil {

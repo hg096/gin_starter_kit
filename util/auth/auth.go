@@ -24,7 +24,7 @@ import (
 	"github.com/golang-jwt/jwt/v4"
 )
 
-// Claims는 액세스 토큰과 리프레시 토큰에 공통적으로 담을 클레임입니다.
+// Claims는 액세스 토큰과 리프레시 토큰에 공통적으로 담을 클레임
 type Claims struct {
 	UserID string `json:"user_id"`
 	jwt.RegisteredClaims
@@ -172,7 +172,7 @@ func DecryptAESGCM(key, cipherData []byte) ([]byte, error) {
 	return plaintext, nil
 }
 
-// GenerateTokens은 userID로 액세스/리프레시 토큰을 생성해 반환합니다.
+// GenerateTokens은 userID로 액세스/리프레시 토큰을 생성해 반환
 func GenerateTokens(userID string) (accessToken string, refreshToken string, err error) {
 	// 액세스 토큰 만료(분)
 	accessExpMin := 30
@@ -203,8 +203,7 @@ func GenerateTokens(userID string) (accessToken string, refreshToken string, err
 	return accessToken, refreshToken, nil
 }
 
-// RefreshHandler은 POST /refresh 에 매핑할 수 있는 Gin 핸들러로,
-// JSON 바디로 받은 { "refresh_token": "..." } 를 검사해 새 토큰을 발급합니다.
+// RefreshHandler은 POST /refresh 에 매핑할 수 있는 Gin 핸들러 JSON 바디로 받은 { "refresh_token": "..." } 를 검사해 새 토큰을 발급
 func RefreshHandler(c *gin.Context) {
 	var req struct {
 		RefreshToken string `json:"refresh_token" binding:"required"`

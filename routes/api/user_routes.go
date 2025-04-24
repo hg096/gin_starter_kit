@@ -29,10 +29,11 @@ func SetupUserRoutes(rg *gin.RouterGroup) {
 			user := model.NewUser()
 
 			data := map[string]string{
-				"u_id":    "Alice",
-				"u_pass":  "Ali",
-				"u_name":  "Alice",
-				"u_email": "alice@example.com",
+				"u_id":        "Alice",
+				"u_pass":      "Ali",
+				"u_name":      "Alice",
+				"u_email":     "alice@example.com",
+				"u_auth_type": "U",
 			}
 
 			insertedID, valErr, sqlErr := user.Insert(c, nil, data, "api/user/make")
@@ -71,19 +72,12 @@ func SetupUserRoutes(rg *gin.RouterGroup) {
 		userGroup.GET("/logIn", func(c *gin.Context) {
 
 			// user := model.NewUser()
-
 			data := map[string]string{
 				"u_id":   "Alice",
 				"u_pass": "Alice11",
 				// "u_name":  "Alice",
 				// "u_email": "alice@example.com",
 			}
-
-			// insertedID, valErr, sqlErr := user.Insert(c, nil, data, "api/user/make")
-			// if valErr != nil || sqlErr != nil {
-			// 	log.Printf("User Insert 에러: %v", valErr)
-			// 	return
-			// }
 
 			at, rt, err := auth.GenerateTokens(data["u_id"])
 			if err != nil {
