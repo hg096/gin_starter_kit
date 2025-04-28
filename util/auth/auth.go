@@ -22,6 +22,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v4"
+	"github.com/joho/godotenv"
 )
 
 // Claims는 액세스 토큰과 리프레시 토큰에 공통적으로 담을 클레임
@@ -36,12 +37,23 @@ type EncryptedClaims struct {
 }
 
 var (
-	AccessSecret  = []byte(os.Getenv("JWT_SECRET"))
-	RefreshSecret = []byte(os.Getenv("JWT_REFRESH_SECRET"))
-	TokenSecret   = []byte(os.Getenv("JWT_TOKEN_SECRET"))
+	AccessSecret  []byte
+	RefreshSecret []byte
+	TokenSecret   []byte
 )
 
 func init() {
+	// .env 파일 로드 (이미 main 에서도 로드하시면 중복 호출해도 무해)
+	if err := godotenv.Load(); err != nil {
+		log.Fatal("[종료] Error loading .env file in auth package")
+		// log.Println("⚠️ .env 파일 로드:", err)
+	}
+
+	// 이제 환경변수를 읽어서 패키지 변수에 할당
+	AccessSecret = []byte(os.Getenv("JWT_SECRET"))
+	RefreshSecret = []byte(os.Getenv("JWT_REFRESH_SECRET"))
+	TokenSecret = []byte(os.Getenv("JWT_TOKEN_SECRET"))
+
 	if len(AccessSecret) != 32 || len(RefreshSecret) != 32 || len(TokenSecret) != 32 {
 		log.Fatal("[종료] JWT_SECRET, JWT_REFRESH_SECRET, JWT_TOKEN_SECRET 는 32자여야 합니다")
 	}
@@ -172,7 +184,7 @@ func DecryptAESGCM(key, cipherData []byte) ([]byte, error) {
 	return plaintext, nil
 }
 
-// GenerateTokens은 userID로 액세스/리프레시 토큰을 생성해 반환
+// GenerateTokens은 userID로 액세스/리프레시 토큰을 생성해 반환, 24시간 이내면 리프레시 토큰 재사용
 func GenerateTokens(userID string, refreshTokenPrev string) (accessToken string, refreshToken string, err error) {
 	// 액세스 토큰 만료(분)
 	accessExpMin := 30
@@ -195,6 +207,7 @@ func GenerateTokens(userID string, refreshTokenPrev string) (accessToken string,
 		}
 	}
 
+	// 24시간 이내면 리프레시 토큰 재사용
 	if refreshTokenPrev != "" {
 		if claims, err := ValidateToken(refreshTokenPrev, RefreshSecret, TokenSecret); err == nil {
 			if time.Until(claims.ExpiresAt.Time) >= 24*time.Hour {
