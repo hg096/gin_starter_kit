@@ -72,23 +72,9 @@ func EmptyPtr[T any](p *T) bool {
 	return p == nil
 }
 
-func EndResponse(c *gin.Context, status int, jsonObj any, debug string) {
-
-	var body gin.H
-
-	switch m := jsonObj.(type) {
-	case gin.H:
-		body = m
-	case map[string]interface{}:
-		body = gin.H(m)
-	default:
-		// 기타 타입이면 data 필드로 래핑
-		body = gin.H{"data": m}
-	}
-
+func EndResponse(c *gin.Context, status int, jsonObj gin.H, debug string) {
 	if gin.Mode() != gin.ReleaseMode {
-		body["messageDebug"] = debug
+		jsonObj["messageDebug"] = debug
 	}
-
-	c.AbortWithStatusJSON(status, body)
+	c.AbortWithStatusJSON(status, jsonObj)
 }
