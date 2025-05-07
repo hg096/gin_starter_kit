@@ -1,7 +1,18 @@
 {
     "swagger": "2.0",
     "info": {
-        "contact": {}
+        "description": "예제용 Gin + Swagger 서버",
+        "title": "Gin Starter API",
+        "contact": {},
+        "version": "1.0"
     },
-    "paths": {}
+    "basePath": "/",
+    "paths": {
+        "/api/user/": {
+            "get": {
+                "summary": "사용자 테스트",
+                "responses": {}
+            }
+        }
+    }
 }

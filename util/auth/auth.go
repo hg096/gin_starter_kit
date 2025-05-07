@@ -199,14 +199,6 @@ func GenerateTokens(userID string, refreshTokenPrev string) (accessToken string,
 		return "", "", err
 	}
 
-	// 리프레시 토큰 만료(일)
-	refreshExpMin := 60 * 24 * 7 // 기본 1주일
-	if v := os.Getenv("JWT_EXPIRES_RE"); v != "" {
-		if d, err := strconv.Atoi(v); err == nil {
-			refreshExpMin = 60 * 24 * d
-		}
-	}
-
 	// 24시간 이내면 리프레시 토큰 재사용
 	if refreshTokenPrev != "" {
 		if claims, err := ValidateToken(refreshTokenPrev, RefreshSecret, TokenSecret); err == nil {
@@ -216,6 +208,13 @@ func GenerateTokens(userID string, refreshTokenPrev string) (accessToken string,
 		}
 	}
 
+	// 리프레시 토큰 만료(일)
+	refreshExpMin := 60 * 24 * 7 // 기본 1주일
+	if v := os.Getenv("JWT_EXPIRES_RE"); v != "" {
+		if d, err := strconv.Atoi(v); err == nil {
+			refreshExpMin = 60 * 24 * d
+		}
+	}
 	refreshToken, err = NewEncryptedToken(userID, refreshExpMin, RefreshSecret, TokenSecret)
 	// refreshToken, err = rt.SignedString(RefreshSecret)
 	if err != nil {
@@ -284,18 +283,23 @@ func JWTAuthMiddleware(userType string, lv int) gin.HandlerFunc {
 			return
 		}
 
+		result, err := core.BuildSelectQuery(c, nil, "select u_auth_type, u_auth_level from _user where u_id = ? ", []string{claims.UserID}, "JWTAuthMiddleware.err")
+		if err != nil {
+			util.EndResponse(c, http.StatusBadRequest, gin.H{}, "fn auth/JWTAuthMiddleware-BuildSelectQuery")
+			return
+		}
+
+		// 사용자 타입 찾기
+		if result[0]["u_auth_type"] != userType {
+			// 만약에 타입이 두가지 이상 들어가야할때
+			// index := strings.Index(userType, result[0]["u_auth_type"])
+			// if index < 0 {
+			util.EndResponse(c, http.StatusBadRequest, gin.H{}, "fn auth/JWTAuthMiddleware-type")
+			return
+		}
+
+		// 등급 레벨 조건이 맞는지 확인
 		if lv > 0 {
-			result, err := core.BuildSelectQuery(c, nil, "select u_auth_type, u_auth_level from _user where u_id = ? ", []string{claims.UserID}, "JWTAuthMiddleware.err")
-			if err != nil {
-				util.EndResponse(c, http.StatusBadRequest, gin.H{}, "fn auth/JWTAuthMiddleware-BuildSelectQuery")
-				return
-			}
-
-			if result[0]["u_auth_type"] != userType {
-				util.EndResponse(c, http.StatusBadRequest, gin.H{}, "fn auth/JWTAuthMiddleware-type")
-				return
-			}
-
 			u_auth_level, _ := strconv.Atoi(result[0]["u_auth_level"])
 			if lv > u_auth_level {
 				util.EndResponse(c, http.StatusBadRequest, gin.H{}, "fn auth/JWTAuthMiddleware-level")
@@ -304,6 +308,9 @@ func JWTAuthMiddleware(userType string, lv int) gin.HandlerFunc {
 		}
 
 		c.Set("user_id", claims.UserID)
+		c.Set("user_type", result[0]["u_auth_type"])
+		c.Set("user_level", result[0]["u_auth_level"])
+
 		c.Next()
 	}
 }

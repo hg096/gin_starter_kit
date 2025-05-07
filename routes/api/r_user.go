@@ -3,6 +3,7 @@ package api
 import (
 	"fmt"
 	"gin_starter/model"
+	"gin_starter/model/core"
 	"gin_starter/util"
 	"gin_starter/util/auth"
 	"log"
@@ -114,6 +115,12 @@ func apiUserLogIn(c *gin.Context) {
 	at, rt, err := auth.GenerateTokens(data["u_id"], "")
 	if err != nil {
 		util.EndResponse(c, http.StatusBadRequest, gin.H{}, "rest /user/login-GenerateTokens")
+		return
+	}
+
+	_, err = core.BuildUpdateQuery(c, nil, "_user", map[string]string{"u_re_token": rt}, "u_id = ?", []string{data["u_id"]}, "fn apiUserLogIn-BuildUpdateQuery")
+	if err != nil {
+		util.EndResponse(c, http.StatusBadRequest, gin.H{}, "fn apiUserLogIn-BuildUpdateQuery")
 		return
 	}
 

@@ -1,4 +1,12 @@
+basePath: /
 info:
   contact: {}
-paths: {}
+  description: 예제용 Gin + Swagger 서버
+  title: Gin Starter API
+  version: "1.0"
+paths:
+  /api/user/:
+    get:
+      responses: {}
+      summary: 사용자 테스트
 swagger: "2.0"

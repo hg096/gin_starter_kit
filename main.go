@@ -6,6 +6,7 @@ import (
 
 	"gin_starter/db"
 	"gin_starter/routes"
+	"gin_starter/util"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -18,19 +19,24 @@ func main() {
 	}
 
 	ginMode := os.Getenv("GIN_MODE")
-	if ginMode == "" {
+	if util.EmptyString(ginMode) {
 		ginMode = gin.DebugMode // 기본적으로 debug 모드를 사용
 	}
 	gin.SetMode(ginMode)
 
 	port := os.Getenv("PORT")
-	if port == "" {
+	if util.EmptyString(port) {
 		port = "8080"
 	}
 
 	db.InitDB()
 
 	r := gin.Default()
+	// 매 요청마다 현재 호스트를 반영
+	// r.Use(func(c *gin.Context) {
+	// 	docs.SwaggerInfo.Host = c.Request.Host
+	// 	c.Next()
+	// })
 	routes.SetupRoutes(r)
 
 	if err := r.Run(":" + port); err != nil {
