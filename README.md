@@ -27,5 +27,5 @@ go mod tidy
 # 서버 실행
 go run main.go
 
-# 스웨거가 보이지 않을때
+# 스웨거가 보이지 않을때 && 갱신
 swag init -g routes/routes.go

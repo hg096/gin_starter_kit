@@ -21,11 +21,11 @@ func SetupUserRoutes(rg *gin.RouterGroup) {
 
 		userGroup.GET("/", func(c *gin.Context) { apiUser(c) })
 
-		userGroup.GET("/make", func(c *gin.Context) { apiUserMake(c) })
+		userGroup.POST("/make", func(c *gin.Context) { apiUserMake(c) })
 
-		userGroup.GET("/makeUp", func(c *gin.Context) { apiUserMakeUp(c) })
+		userGroup.POST("/makeUp", func(c *gin.Context) { apiUserMakeUp(c) })
 
-		userGroup.GET("/logIn", func(c *gin.Context) { apiUserLogIn(c) })
+		userGroup.POST("/logIn", func(c *gin.Context) { apiUserLogIn(c) })
 
 		userGroup.GET("/logOut", func(c *gin.Context) { apiUserLogOut(c) })
 
