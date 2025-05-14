@@ -1,6 +1,7 @@
 package util
 
 import (
+	"strings"
 	"sync"
 
 	"github.com/gin-gonic/gin"
@@ -77,4 +78,52 @@ func EndResponse(c *gin.Context, status int, jsonObj gin.H, debug string) {
 		jsonObj["messageDebug"] = debug
 	}
 	c.AbortWithStatusJSON(status, jsonObj)
+}
+
+// 바디 캐싱
+func cacheJSONBody(c *gin.Context) map[string]interface{} {
+	if b, exists := c.Get("jsonBody"); exists {
+		return b.(map[string]interface{})
+	}
+	body := make(map[string]interface{})
+	_ = c.ShouldBindJSON(&body)
+	c.Set("jsonBody", body)
+	return body
+}
+
+// BindField는 POST/PUT 요청에서 key에 해당하는 값을 JSON 바디, 폼, 쿼리 순으로 찾아 반환
+func BindField(c *gin.Context, key string, defaultValue string) string {
+
+	// JSON 바디 캐시에서 조회
+	for _, ct := range []string{c.GetHeader("Content-Type"), c.GetHeader("Accept")} {
+		if strings.Contains(ct, "application/json") {
+			if v, ok := cacheJSONBody(c)[key]; ok {
+				if s, ok := v.(string); ok && s != "" {
+					return s
+				}
+			}
+			break
+		}
+	}
+
+	// Form 데이터
+	if v := c.PostForm(key); v != "" {
+		return v
+	}
+
+	// URL 쿼리
+	if v := c.Query(key); v != "" {
+		return v
+	}
+
+	return defaultValue
+}
+
+// 한번에 처리 - map[string][]string{ "findKey":{"insertKey","defaultValue"}, }
+func BindFields(c *gin.Context, defaults map[string][]string) map[string]string {
+	out := make(map[string]string, len(defaults))
+	for key, def := range defaults {
+		out[def[0]] = BindField(c, key, def[1])
+	}
+	return out
 }

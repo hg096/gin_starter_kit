@@ -60,13 +60,14 @@ func apiUserMake(c *gin.Context) {
 
 	user := model.NewUser()
 
-	data := map[string]string{
-		"u_id":        "Alice",
-		"u_pass":      "Ali",
-		"u_name":      "Alice",
-		"u_email":     "alice@example.com",
-		"u_auth_type": "U",
-	}
+	data := util.BindFields(c, map[string][]string{
+		"user_id":    {"u_id", ""},
+		"user_pass":  {"u_pass", ""},
+		"user_name":  {"u_name", ""},
+		"user_email": {"u_email", ""},
+	})
+
+	data["u_auth_type"] = "U"
 
 	insertedID, valErr, sqlErr := user.Insert(c, nil, data, "api/user/make")
 	if valErr != nil || sqlErr != nil {
@@ -84,14 +85,14 @@ func apiUserMakeUp(c *gin.Context) {
 
 	user := model.NewUpUser()
 
-	data := map[string]string{
-		"u_id": "Alice",
-		// "u_pass": "Alice11",
-		// "u_name":  "Alice",
-		"u_email": "alice1@example.com",
-	}
+	data := util.BindFields(c, map[string][]string{
+		"user_id": {"u_id", ""},
+		// "user_pass":  {"u_pass", ""},
+		// "user_name":  {"u_name", ""},
+		"user_email": {"u_email", ""},
+	})
 
-	valErr, sqlErr := user.Update(c, nil, data, "u_id = ?", []string{"Alice"}, "api/user/makeUp")
+	valErr, sqlErr := user.Update(c, nil, data, "u_id = ?", []string{data["u_id"]}, "api/user/makeUp")
 	if valErr != nil || sqlErr != nil {
 		log.Printf("User Insert 에러: %v", valErr)
 		return
@@ -104,13 +105,11 @@ func apiUserMakeUp(c *gin.Context) {
 
 // 로그인
 func apiUserLogIn(c *gin.Context) {
-	// user := model.NewUser()
-	data := map[string]string{
-		"u_id":   "Alice",
-		"u_pass": "Alice11",
-		// "u_name":  "Alice",
-		// "u_email": "alice@example.com",
-	}
+
+	data := util.BindFields(c, map[string][]string{
+		"user_id":   {"u_id", ""},
+		"user_pass": {"u_pass", ""},
+	})
 
 	at, rt, err := auth.GenerateTokens(data["u_id"], "")
 	if err != nil {
