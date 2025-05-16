@@ -92,7 +92,7 @@ func cacheJSONBody(c *gin.Context) map[string]interface{} {
 }
 
 // BindField는 POST/PUT 요청에서 key에 해당하는 값을 JSON 바디, 폼, 쿼리 순으로 찾아 반환
-func BindField(c *gin.Context, key string, defaultValue string) string {
+func PostBindField(c *gin.Context, key string, defaultValue string) string {
 
 	// JSON 바디 캐시에서 조회
 	for _, ct := range []string{c.GetHeader("Content-Type"), c.GetHeader("Accept")} {
@@ -119,11 +119,29 @@ func BindField(c *gin.Context, key string, defaultValue string) string {
 	return defaultValue
 }
 
-// 한번에 처리 - map[string][]string{ "findKey":{"insertKey","defaultValue"}, }
-func BindFields(c *gin.Context, defaults map[string][]string) map[string]string {
+// 한번에 처리 - map[string][2]string{ "findKey":{"insertKey","defaultValue"}, }
+func PostFields(c *gin.Context, defaults map[string][2]string) map[string]string {
 	out := make(map[string]string, len(defaults))
 	for key, def := range defaults {
-		out[def[0]] = BindField(c, key, def[1])
+		out[def[0]] = PostBindField(c, key, def[1])
+	}
+	return out
+}
+
+// GetField는 URL 쿼리 파라미터에서 key에 해당하는 값을 찾아 반환
+func GetBindField(c *gin.Context, key, defaultValue string) string {
+	if v := c.Query(key); v != "" {
+		return v
+	}
+	return defaultValue
+}
+
+// 한번에 처리 - map[string][2]string{ "findKey":{"returnKey","defaultValue"}, }
+func GetFields(c *gin.Context, defaults map[string][2]string) map[string]string {
+	out := make(map[string]string, len(defaults))
+	for queryKey, def := range defaults {
+		outKey, defaultValue := def[0], def[1]
+		out[outKey] = GetBindField(c, queryKey, defaultValue)
 	}
 	return out
 }

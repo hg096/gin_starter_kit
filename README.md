@@ -27,5 +27,8 @@ go mod tidy
 # 서버 실행
 go run main.go
 
+# docs/ 폴더가 자동 생성됨
+swag init
+
 # 스웨거가 보이지 않을때 && 갱신
 swag init -g routes/routes.go
