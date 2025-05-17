@@ -134,6 +134,7 @@ func apiUserLogOut(c *gin.Context) {
 // 프로필 조회
 func apiUserProfile(c *gin.Context) {
 	uid := util.GetBindField(c, "user_id", "")
+	userID := c.MustGet("user_id").(string)
 
-	util.EndResponse(c, 200, gin.H{"user": uid}, "rest /user/profile")
+	util.EndResponse(c, 200, gin.H{"user": uid, "userID": userID}, "rest /user/profile")
 }

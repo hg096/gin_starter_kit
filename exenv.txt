@@ -8,6 +8,8 @@ DB_NAME="디비명"
 # debug, release, test
 GIN_MODE="debug"
 
+SERVICE_NAME="서비스명"
+
 # 토큰 서명에 사용할 비밀 키 32자
 # 엑세스
 JWT_SECRET="엑세스"
@@ -19,6 +21,7 @@ JWT_TOKEN_SECRET="토큰내용암호화"
 JWT_EXPIRES_IN="5"
 # 리프레시 토큰 만료 시간(일)
 JWT_EXPIRES_RE="1"
+
 
 ==
 

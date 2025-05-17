@@ -27,7 +27,7 @@ import (
 
 // Claims는 액세스 토큰과 리프레시 토큰에 공통적으로 담을 클레임
 type Claims struct {
-	UserID string `json:"user_id"`
+	JWTUserID string `json:"user_id"`
 	jwt.RegisteredClaims
 }
 
@@ -67,21 +67,22 @@ func NewEncryptedToken(userID string, expMin int, signingKey []byte, encryptionK
 ) (string, error) {
 	now := time.Now()
 
-	// A) 원본 Claims JSON
-	orig := Claims{
-		UserID: userID,
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(now.Add(time.Duration(expMin) * time.Minute)),
-			IssuedAt:  jwt.NewNumericDate(now),
-			Subject:   userID,
-		},
+	serviceName := os.Getenv("SERVICE_NAME")
+	if util.EmptyString(serviceName) {
+		serviceName = "ginStart"
 	}
-	raw, err := json.Marshal(orig)
+
+	payload := struct {
+		UserID string `json:"user_id"`
+	}{
+		UserID: userID,
+	}
+	raw, err := json.Marshal(payload)
 	if err != nil {
 		return "", err
 	}
 
-	// B) AES‑GCM 암호화
+	// AES‑GCM 암호화
 	cipherBytes, err := EncryptAESGCM(encryptionKey, raw)
 	if err != nil {
 		return "", err
@@ -89,13 +90,13 @@ func NewEncryptedToken(userID string, expMin int, signingKey []byte, encryptionK
 	// Base64-URL 인코딩
 	dataB64 := base64.RawURLEncoding.EncodeToString(cipherBytes)
 
-	// C) EncryptedClaims에 담아서 JWT 서명
+	// EncryptedClaims에 담아서 JWT 서명
 	enc := EncryptedClaims{
 		Data: dataB64,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(now.Add(time.Duration(expMin) * time.Minute)),
 			IssuedAt:  jwt.NewNumericDate(now),
-			Subject:   userID,
+			Subject:   serviceName,
 		},
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, enc)
@@ -105,7 +106,7 @@ func NewEncryptedToken(userID string, expMin int, signingKey []byte, encryptionK
 // 토큰 검증 함수
 func ValidateToken(tokenStr string, signingKey []byte, encryptionKey []byte,
 ) (*Claims, error) {
-	// A) 서명 검증 & EncryptedClaims 채우기
+	// 서명 검증 & EncryptedClaims 채우기
 	token, err := jwt.ParseWithClaims(tokenStr, &EncryptedClaims{}, func(t *jwt.Token) (interface{}, error) {
 		if t.Method != jwt.SigningMethodHS256 {
 			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
@@ -115,52 +116,58 @@ func ValidateToken(tokenStr string, signingKey []byte, encryptionKey []byte,
 	if err != nil {
 		return nil, err
 	}
-	encClaims, ok := token.Claims.(*EncryptedClaims)
+	enc, ok := token.Claims.(*EncryptedClaims)
 	if !ok || !token.Valid {
 		return nil, fmt.Errorf("invalid token")
 	}
 
-	// B) Base64 → 바이트
-	cipherBytes, err := base64.RawURLEncoding.DecodeString(encClaims.Data)
+	// Base64 → 바이트
+	cipherBytes, err := base64.RawURLEncoding.DecodeString(enc.Data)
 	if err != nil {
 		return nil, err
 	}
 
-	// C) AES‑GCM 복호화 → 원본 JSON
+	// AES‑GCM 복호화 → 원본 JSON
 	raw, err := DecryptAESGCM(encryptionKey, cipherBytes)
 	if err != nil {
 		return nil, err
 	}
 
-	// D) JSON → Claims 구조체
-	var orig Claims
-	if err := json.Unmarshal(raw, &orig); err != nil {
+	var p struct {
+		JWTUserID string `json:"user_id"`
+	}
+	if err := json.Unmarshal(raw, &p); err != nil {
 		return nil, err
 	}
 
-	return &orig, nil
+	return &Claims{
+		JWTUserID:        p.JWTUserID,
+		RegisteredClaims: enc.RegisteredClaims,
+	}, nil
 }
+
 func EncryptAESGCM(key, plaintext []byte) ([]byte, error) {
-	// 1) AES 블록 생성
+	// AES 블록 생성
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return nil, fmt.Errorf("AES NewCipher: %w", err)
 	}
-	// 2) GCM 모드 생성
+	// GCM 모드 생성
 	aead, err := cipher.NewGCM(block)
 	if err != nil {
 		return nil, fmt.Errorf("cipher NewGCM: %w", err)
 	}
-	// 3) 랜덤 nonce 생성
+	// 랜덤 nonce 생성
 	nonce := make([]byte, aead.NonceSize())
 	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
 		return nil, fmt.Errorf("nonce 생성 실패: %w", err)
 	}
-	// 4) Seal: nonce || ciphertext||tag
-	ciphertext := aead.Seal(nil, nonce, plaintext, nil)
-	// 5) 결과에 nonce를 앞에 붙여 반환
-	return append(nonce, ciphertext...), nil
+	// Seal: nonce || cipherText||tag
+	cipherText := aead.Seal(nil, nonce, plaintext, nil)
+	// 결과에 nonce를 앞에 붙여 반환
+	return append(nonce, cipherText...), nil
 }
+
 func DecryptAESGCM(key, cipherData []byte) ([]byte, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
@@ -174,10 +181,10 @@ func DecryptAESGCM(key, cipherData []byte) ([]byte, error) {
 	if len(cipherData) < nonceSize {
 		return nil, fmt.Errorf("cipherData 길이가 nonceSize(%d)보다 작음", nonceSize)
 	}
-	// nonce와 ciphertext 분리
-	nonce, ciphertext := cipherData[:nonceSize], cipherData[nonceSize:]
+	// nonce와 cipherText 분리
+	nonce, cipherText := cipherData[:nonceSize], cipherData[nonceSize:]
 	// Open: 복호화 및 인증 태그 검증
-	plaintext, err := aead.Open(nil, nonce, ciphertext, nil)
+	plaintext, err := aead.Open(nil, nonce, cipherText, nil)
 	if err != nil {
 		return nil, fmt.Errorf("AES-GCM 복호화 실패: %w", err)
 	}
@@ -231,7 +238,15 @@ func RefreshHandler(c *gin.Context) {
 		"refresh_token": {"refresh_token", ""},
 	})
 
-	// 1) 리프레시 토큰 검증
+	if postData["refresh_token"] == "" {
+		util.EndResponse(c, http.StatusBadRequest, gin.H{}, "fn auth/RefreshHandler-missingToken")
+		return
+	}
+
+	fmt.Println("RefreshHandler postData")
+	fmt.Println(postData["refresh_token"])
+
+	// 리프레시 토큰 검증
 	claims, err := ValidateToken(postData["refresh_token"], RefreshSecret, TokenSecret)
 	if err != nil {
 		util.EndResponse(c, http.StatusBadRequest, gin.H{}, "fn auth/RefreshHandler-ValidateToken")
@@ -245,8 +260,8 @@ func RefreshHandler(c *gin.Context) {
 		return
 	}
 
-	// 2) 새 토큰 생성
-	newAT, newRT, err := GenerateTokens(claims.UserID, postData["refresh_token"])
+	// 새 토큰 생성
+	newAT, newRT, err := GenerateTokens(claims.JWTUserID, postData["refresh_token"])
 	if err != nil {
 		util.EndResponse(c, http.StatusBadRequest, gin.H{}, "fn auth/RefreshHandler-GenerateTokens")
 		return
@@ -280,7 +295,7 @@ func JWTAuthMiddleware(userType string, lv int) gin.HandlerFunc {
 			return
 		}
 
-		result, err := core.BuildSelectQuery(c, nil, "select u_auth_type, u_auth_level from _user where u_id = ? ", []string{claims.UserID}, "JWTAuthMiddleware.err")
+		result, err := core.BuildSelectQuery(c, nil, "select u_auth_type, u_auth_level from _user where u_id = ? ", []string{claims.JWTUserID}, "JWTAuthMiddleware.err")
 		if err != nil {
 			util.EndResponse(c, http.StatusBadRequest, gin.H{}, "fn auth/JWTAuthMiddleware-BuildSelectQuery")
 			return
@@ -304,7 +319,8 @@ func JWTAuthMiddleware(userType string, lv int) gin.HandlerFunc {
 			}
 		}
 
-		c.Set("user_id", claims.UserID)
+		// 기본설정이 더 필요할때 여기서 추가
+		c.Set("user_id", claims.JWTUserID)
 		c.Set("user_type", result[0]["u_auth_type"])
 		c.Set("user_level", result[0]["u_auth_level"])
 
