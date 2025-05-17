@@ -226,36 +226,33 @@ func GenerateTokens(userID string, refreshTokenPrev string) (accessToken string,
 
 // RefreshHandler은 POST /refresh 에 매핑할 수 있는 Gin 핸들러 JSON 바디로 받은 { "refresh_token": "..." } 를 검사해 새 토큰을 발급
 func RefreshHandler(c *gin.Context) {
-	var req struct {
-		RefreshToken string `json:"refresh_token" binding:"required"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		util.EndResponse(c, http.StatusBadRequest, gin.H{}, "fn auth/RefreshHandler")
-		return
-	}
+
+	postData := util.BindFields(c, map[string][]string{
+		"refresh_token": {"refresh_token", ""},
+	})
 
 	// 1) 리프레시 토큰 검증
-	claims, err := ValidateToken(req.RefreshToken, RefreshSecret, TokenSecret)
+	claims, err := ValidateToken(postData["refresh_token"], RefreshSecret, TokenSecret)
 	if err != nil {
 		util.EndResponse(c, http.StatusBadRequest, gin.H{}, "fn auth/RefreshHandler-ValidateToken")
 		return
 	}
 
 	// 디비 검증
-	resultUser, err := core.BuildSelectQuery(c, nil, "select u_re_token from _user where u_re_token = ? ", []string{req.RefreshToken}, "RefreshHandler.err")
+	resultUser, err := core.BuildSelectQuery(c, nil, "select u_re_token from _user where u_re_token = ? ", []string{postData["refresh_token"]}, "RefreshHandler.err")
 	if err != nil || util.EmptyString(resultUser[0]["u_re_token"]) {
 		util.EndResponse(c, http.StatusBadRequest, gin.H{}, "fn auth/RefreshHandler-BuildSelectQuery")
 		return
 	}
 
 	// 2) 새 토큰 생성
-	newAT, newRT, err := GenerateTokens(claims.UserID, req.RefreshToken)
+	newAT, newRT, err := GenerateTokens(claims.UserID, postData["refresh_token"])
 	if err != nil {
 		util.EndResponse(c, http.StatusBadRequest, gin.H{}, "fn auth/RefreshHandler-GenerateTokens")
 		return
 	}
 
-	_, err = core.BuildUpdateQuery(c, nil, "_user", map[string]string{"u_re_token": newRT}, "u_re_token = ?", []string{req.RefreshToken}, "fn auth/RefreshHandler-BuildUpdateQuery")
+	_, err = core.BuildUpdateQuery(c, nil, "_user", map[string]string{"u_re_token": newRT}, "u_re_token = ?", []string{postData["refresh_token"]}, "fn auth/RefreshHandler-BuildUpdateQuery")
 	if err != nil {
 		util.EndResponse(c, http.StatusBadRequest, gin.H{}, "fn auth/RefreshHandler-BuildUpdateQuery")
 		return

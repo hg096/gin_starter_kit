@@ -143,18 +143,22 @@ func BuildSelectQuery(c *gin.Context, tx *sql.Tx,
 	}
 
 	var results []map[string]string
+	// 스캔용 RawBytes 슬라이스 + interface{} 포인터 슬라이스
+	rawVals := make([]sql.RawBytes, len(cols))
+	scanArgs := make([]interface{}, len(cols))
+	for i := range rawVals {
+		scanArgs[i] = &rawVals[i]
+	}
 
 	for rows.Next() {
-		values := make([]string, len(cols))
-
-		if err := rows.Scan(util.ToInterfaceSlice(values)...); err != nil {
+		if err := rows.Scan(scanArgs...); err != nil {
 			fullQuery := SubstituteQuery(query, args)
 			HandleSqlError(c, tx, fullQuery, 0, errWhere, err)
 			return nil, err
 		}
 		rowMap := make(map[string]string, len(cols))
 		for i, col := range cols {
-			rowMap[col] = values[i]
+			rowMap[col] = string(rawVals[i])
 		}
 		results = append(results, rowMap)
 	}

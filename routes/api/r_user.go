@@ -29,7 +29,7 @@ func SetupUserRoutes(rg *gin.RouterGroup) {
 
 		userGroup.GET("/logOut", func(c *gin.Context) { apiUserLogOut(c) })
 
-		userGroup.GET("/refresh", auth.RefreshHandler)
+		userGroup.POST("/refresh", auth.RefreshHandler)
 
 		// userGroup.Use(auth.JWTAuthMiddleware("U", 0))
 		// {
