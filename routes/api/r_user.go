@@ -60,7 +60,7 @@ func apiUserMake(c *gin.Context) {
 
 	user := model.NewUser()
 
-	data := util.BindFields(c, map[string][]string{
+	data := util.PostFields(c, map[string][2]string{
 		"user_id":    {"u_id", ""},
 		"user_pass":  {"u_pass", ""},
 		"user_name":  {"u_name", ""},
@@ -85,7 +85,7 @@ func apiUserMakeUp(c *gin.Context) {
 
 	user := model.NewUpUser()
 
-	data := util.BindFields(c, map[string][]string{
+	data := util.PostFields(c, map[string][2]string{
 		"user_id": {"u_id", ""},
 		// "user_pass":  {"u_pass", ""},
 		// "user_name":  {"u_name", ""},
@@ -106,7 +106,7 @@ func apiUserMakeUp(c *gin.Context) {
 // 로그인
 func apiUserLogIn(c *gin.Context) {
 
-	data := util.BindFields(c, map[string][]string{
+	data := util.PostFields(c, map[string][2]string{
 		"user_id":   {"u_id", ""},
 		"user_pass": {"u_pass", ""},
 	})
@@ -133,6 +133,7 @@ func apiUserLogOut(c *gin.Context) {
 
 // 프로필 조회
 func apiUserProfile(c *gin.Context) {
-	uid := c.GetString("user_id")
+	uid := util.GetBindField(c, "user_id", "")
+
 	util.EndResponse(c, 200, gin.H{"user": uid}, "rest /user/profile")
 }
