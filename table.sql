@@ -18,6 +18,7 @@ CREATE TABLE `_user` (
 	`u_email` VARCHAR(100) NULL DEFAULT NULL COLLATE 'utf8mb4_general_ci',
 	`u_name` VARCHAR(50) NULL DEFAULT NULL COLLATE 'utf8mb4_general_ci',
 	`u_re_token` TEXT NULL DEFAULT NULL COLLATE 'utf8mb4_general_ci',
+	`u_memo` TEXT NULL DEFAULT NULL COLLATE 'utf8mb4_general_ci',
 	`u_regi_date` DATETIME NULL DEFAULT (now()),
 	PRIMARY KEY (`u_idx`) USING BTREE,
 	UNIQUE INDEX `u_id` (`u_id`) USING BTREE
@@ -29,3 +30,6 @@ ENGINE=InnoDB
 
 ALTER TABLE `_user`
 	ADD COLUMN `u_re_token` TEXT NULL DEFAULT NULL AFTER `u_name`;
+
+ALTER TABLE `_user`
+	ADD COLUMN `u_memo` TEXT NULL DEFAULT NULL AFTER `u_re_token`;
