@@ -69,9 +69,20 @@ func apiUserMake(c *gin.Context) {
 
 	data["u_auth_type"] = "U"
 
-	insertedID, valErr, sqlErr := user.Insert(c, nil, data, "api/user/make")
+	// 트랜젝션 예시 불필요할시 제거
+	tx, err := core.BeginTransaction(c)
+	if err != nil {
+		return
+	}
+
+	insertedID, valErr, sqlErr := user.Insert(c, tx, data, "api/user/make")
 	if valErr != nil || sqlErr != nil {
 		log.Printf("User Insert 에러: %v", valErr)
+		return
+	}
+
+	// 트랜젝션 예시 불필요할시 제거
+	if cerr := core.EndTransactionCommit(tx); cerr != nil {
 		return
 	}
 

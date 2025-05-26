@@ -117,6 +117,54 @@ func HandleValidationError(c *gin.Context, tx *sql.Tx, err error, converts map[s
 	return true
 }
 
+// sql where 취약점 개선
+func SanitizeWhereClause(where string) string {
+	// 금지 키워드 (대소문자 구분 없이)
+	badPatterns := []string{
+		";",  // 명령어 구분자
+		"--", // 주석 → 이후 쿼리 무력화 가능
+		// "drop",   // DROP TABLE 등
+		// "delete", // DELETE FROM
+		// "truncate",
+		// "alter",
+		// "update", // where 안에서 sub update 막기
+	}
+
+	lowered := strings.ToLower(where)
+	for _, pattern := range badPatterns {
+		if strings.Contains(lowered, pattern) {
+			// 로그로 남기고 삭제 또는 치환
+			where = strings.ReplaceAll(where, pattern, "")
+		}
+	}
+
+	return where
+}
+
+// 트랜젝션 시작
+func BeginTransaction(c *gin.Context) (*sql.Tx, error) {
+	if db.Conn == nil {
+		return nil, fmt.Errorf("database connection is not set")
+	}
+	tx, err := db.Conn.Begin()
+	if err != nil {
+		// c.JSON(500, gin.H{"error": "트랜잭션 시작 실패"})
+		return nil, err
+	}
+	return tx, nil
+}
+
+// 트랜젝션 종료
+func EndTransactionCommit(tx *sql.Tx) error {
+	if tx == nil {
+		return fmt.Errorf("nil transaction provided")
+	}
+	if err := tx.Commit(); err != nil {
+		// return fmt.Errorf("commit failed: %v", err)
+	}
+	return nil
+}
+
 func BuildSelectQuery(c *gin.Context, tx *sql.Tx,
 	query string, args []string, errWhere string) ([]map[string]string, error) {
 
@@ -251,7 +299,8 @@ func BuildUpdateQuery(c *gin.Context, tx *sql.Tx,
 	// SET 절 구성: "col1 = ?, col2 = ?, ..."
 	setPart := strings.Join(setClauses, ", ")
 
-	query := fmt.Sprintf("UPDATE %s SET %s WHERE %s", tableName, setPart, whereClause)
+	safeWhere := SanitizeWhereClause(whereClause)
+	query := fmt.Sprintf("UPDATE %s SET %s WHERE %s", tableName, setPart, safeWhere)
 	args = append(args, whereArgs...)
 
 	result, err := db.Conn.Exec(query, util.ToInterfaceSlice(args)...)
@@ -269,13 +318,67 @@ func BuildDeleteQuery(c *gin.Context, tx *sql.Tx,
 	if db.Conn == nil {
 		return nil, fmt.Errorf("database connection is not set")
 	}
-
-	query := fmt.Sprintf("DELETE FROM %s WHERE %s", tableName, whereClause)
+	safeWhere := SanitizeWhereClause(whereClause)
+	query := fmt.Sprintf("DELETE FROM %s WHERE %s", tableName, safeWhere)
 
 	// parameterized query 방식
 	result, err := db.Conn.Exec(query, util.ToInterfaceSlice(whereArgs)...)
 	if err != nil {
 		HandleSqlError(c, tx, query, 0, errWhere, err)
+		return nil, err
+	}
+
+	return result, nil
+}
+
+func BuildInsertQueryMulti(c *gin.Context, tx *sql.Tx,
+	tableName string, dataList []map[string]string, errWhere string) (sql.Result, error) {
+
+	if db.Conn == nil {
+		return nil, fmt.Errorf("database connection is not set")
+	}
+	if len(dataList) == 0 {
+		return nil, fmt.Errorf("no data to insert")
+	}
+
+	// 모든 컬럼 수집 (순서 고정)
+	columnSet := map[string]struct{}{}
+	var columns []string
+	for _, data := range dataList {
+		for col := range data {
+			if _, exists := columnSet[col]; !exists {
+				columnSet[col] = struct{}{}
+				columns = append(columns, col)
+			}
+		}
+	}
+
+	var valueRows []string
+	var args []string
+
+	for _, data := range dataList {
+		var rowParts []string
+		for _, col := range columns {
+			if val, ok := data[col]; ok {
+				rowParts = append(rowParts, "?")
+				args = append(args, val)
+			} else {
+				rowParts = append(rowParts, "DEFAULT")
+			}
+		}
+		valueRows = append(valueRows, "("+strings.Join(rowParts, ", ")+")")
+	}
+
+	query := fmt.Sprintf("INSERT INTO %s (%s) VALUES %s",
+		tableName,
+		strings.Join(columns, ", "),
+		strings.Join(valueRows, ", "),
+	)
+
+	result, err := db.Conn.Exec(query, util.ToInterfaceSlice(args)...)
+	if err != nil {
+		fullQuery := SubstituteQuery(query, args)
+		HandleSqlError(c, tx, fullQuery, 0, errWhere, err)
 		return nil, err
 	}
 

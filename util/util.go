@@ -119,7 +119,7 @@ func PostBindField(c *gin.Context, key string, defaultValue string) string {
 	return defaultValue
 }
 
-// 한번에 처리 - map[string][2]string{ "findKey":{"insertKey","defaultValue"}, }
+// POST 한번에 처리 - map[string][2]string{ "findKey":{"insertKey","defaultValue"}, }
 func PostFields(c *gin.Context, defaults map[string][2]string) map[string]string {
 	out := make(map[string]string, len(defaults))
 	for key, def := range defaults {
@@ -136,7 +136,7 @@ func GetBindField(c *gin.Context, key, defaultValue string) string {
 	return defaultValue
 }
 
-// 한번에 처리 - map[string][2]string{ "findKey":{"returnKey","defaultValue"}, }
+// GET 한번에 처리 - map[string][2]string{ "findKey":{"returnKey","defaultValue"}, }
 func GetFields(c *gin.Context, defaults map[string][2]string) map[string]string {
 	out := make(map[string]string, len(defaults))
 	for queryKey, def := range defaults {
