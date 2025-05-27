@@ -6,14 +6,12 @@ package routes
 
 import (
 	_ "gin_starter/docs" // docs 폴더 import (자동 생성된 문서)
-	"net/http"
-
-	"gin_starter/util"
 
 	"github.com/gin-gonic/gin"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 
+	"gin_starter/routes/adm"
 	"gin_starter/routes/api"
 	"gin_starter/routes/out"
 )
@@ -27,9 +25,13 @@ func SetupRoutes(r *gin.Engine) {
 		// ginSwagger.URL("/swagger/swagger.json"),
 	))
 
-	r.GET("/", func(c *gin.Context) {
-		util.EndResponse(c, http.StatusOK, gin.H{"message": "home"}, "rest /")
-	})
+	// r.SetHTMLTemplate(template.Must(template.ParseGlob("templates/**/*")))
+
+	admGroup := r.Group("/adm")
+	{
+
+		adm.SetupAdminRoutes(admGroup)
+	}
 
 	apiGroup := r.Group("/api")
 	{
@@ -52,4 +54,10 @@ func SetupRoutes(r *gin.Engine) {
 		out.SetupOutRoutes(outGroup)
 	}
 
+	// // 템플릿 에러 핸들링용 fallback route
+	// r.NoRoute(func(c *gin.Context) {
+	// 	pageUtil.RenderPage(c, "error", gin.H{
+	// 		"Message": "페이지를 찾을 수 없습니다.",
+	// 	})
+	// })
 }

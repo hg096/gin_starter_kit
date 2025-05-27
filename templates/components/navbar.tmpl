@@ -1,0 +1,14 @@
+{{define "navbar"}}
+<nav class="fixed top-0 left-0 w-full z-50 bg-white shadow-md px-6 py-3 flex justify-between items-center">
+  <a href="/" class="text-xl font-bold text-blue-600 hover:text-blue-800">MySite</a>
+
+  <div class="space-x-4 text-sm">
+    {{if .IsLoggedIn}}
+      <span class="text-gray-700">{{.UserName}} 님 환영합니다!</span>
+      <a href="/logout" class="text-red-500 hover:text-red-700 font-semibold">로그아웃</a>
+    {{else}}
+      <a href="/login" class="text-blue-600 hover:text-blue-800 font-semibold">로그인</a>
+    {{end}}
+  </div>
+</nav>
+{{end}}
