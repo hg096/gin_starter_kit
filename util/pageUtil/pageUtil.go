@@ -14,6 +14,7 @@ func RenderPage(c *gin.Context, page string, data gin.H) {
 		"templates/layouts/layout.tmpl",
 		fmt.Sprintf("templates/pages/%s.tmpl", page),
 		"templates/components/navbar.tmpl",
+		"templates/components/sidebar.tmpl",
 		"templates/components/footer.tmpl",
 	)
 	if err != nil {

@@ -15,6 +15,14 @@ import (
 
 func SetupAdminRoutes(rg *gin.RouterGroup) {
 
+	rg.GET("/", func(c *gin.Context) {
+		// 예시: 세션 또는 쿠키 기반 로그인 정보
+		pageUtil.RenderPage(c, "home", gin.H{
+			// "IsLoggedIn": true,
+			"UserName": "홍길동",
+		})
+	})
+
 	adminGroup := rg.Group("/manage")
 	{
 		adminGroup.GET("/", func(c *gin.Context) {
