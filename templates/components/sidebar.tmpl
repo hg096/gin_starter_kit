@@ -5,26 +5,32 @@
   <nav class="px-4" id="sidebar-app" v-cloak>
     <ul class="space-y-2 text-sm">
       <li>
-        <a :class="linkClass('/adm/dashboard')" href="/adm/dashboard">대시보드</a>
+        <a :class="linkClass('/adm/dashboard')" href="/adm/dashboard" class="sidebar-link">대시보드</a>
       </li>
 
-      <li v-for="(menu, index) in menus" :key="menu.key">
-        <button @click="toggle(menu.key)"
-                class="flex items-center justify-between w-full px-3 py-2 rounded hover:bg-blue-50 font-semibold text-gray-700">
-          <span v-text="menu.label"></span>
-          <span :class="rotateIcon(menu.key)">→</span>
+      {{range .Menus}}
+      <li>
+        <button
+          @click="toggleMenu('{{.Key}}')"
+          class="flex items-center justify-between w-full px-3 py-2 font-semibold text-gray-700 hover:bg-blue-50"
+        >
+          <span>{{.Label}}</span>
+          <span :class="rotateIcon('{{.Key}}')">→</span>
         </button>
-        <ul v-show="isOpen(menu.key)" class="ml-4 mt-1 space-y-1">
-          <li v-for="item in menu.items" :key="item.href">
-            <a :href="item.href" :class="linkClass(item.href)">
-              <span v-text="item.label"></span>
+        <ul v-show="isOpen('{{.Key}}')" class="ml-4 mt-1 space-y-1">
+          {{range .Items}}
+          <li>
+            <a :class="linkClass('{{.Href}}')" href="{{.Href}}" class="sidebar-link">
+              <span>{{.Label}}</span>
             </a>
           </li>
+          {{end}}
         </ul>
       </li>
+      {{end}}
 
       <li>
-        <a :class="linkClass('/adm/settings')" href="/adm/settings">설정</a>
+        <a :class="linkClass('/adm/settings')" href="/adm/settings" class="sidebar-link">설정</a>
       </li>
 
       <li>
@@ -35,85 +41,56 @@
 </aside>
 
 <style>
-  [v-cloak] { display: none; }
-  .active-link {
-    @apply bg-blue-100 text-blue-700 font-semibold;
+  [v-cloak] {
+    display: none;
   }
+
   .sidebar-link {
     @apply block px-3 py-2 rounded hover:bg-blue-50;
   }
+
+  .active-link {
+    @apply bg-blue-100 text-blue-700 font-semibold;
+  }
+
   .rotate-90 {
     transform: rotate(90deg);
   }
 </style>
 
 <script>
-  const { createApp } = Vue;
+  const { createApp, reactive } = Vue;
 
   createApp({
-    data() {
-      return {
+    setup() {
+      const state = reactive({
+        openMenu: '',
         currentPath: window.location.pathname,
-        openMenu: '',  // 현재 열린 메뉴 key
-        menus: [
-          {
-            key: 'posts',
-            label: '게시물 관리',
-            items: [
-              { label: '공지사항', href: '/adm/posts/notice' },
-              { label: '자주 묻는 질문', href: '/adm/posts/faq' },
-              { label: '뉴스', href: '/adm/posts/news' },
-            ]
-          },
-          {
-            key: 'ads',
-            label: '광고 관리',
-            items: [
-              { label: '배너 설정', href: '/adm/ads/banner' },
-              { label: '광고 승인', href: '/adm/ads/approval' },
-            ]
-          },
-          {
-            key: 'userGroups',
-            label: '회원 그룹 관리',
-            items: [
-              { label: '등급 설정', href: '/adm/users/grades' },
-              { label: '권한 설정', href: '/adm/users/permissions' },
-            ]
-          }
-        ]
-      };
-    },
-    mounted() {
-      // 현재 경로에 맞는 메뉴 자동 오픈
-      for (const menu of this.menus) {
-        if (menu.items.some(item => this.currentPath.startsWith(item.href))) {
-          this.openMenu = menu.key;
-          break;
-        }
-      }
-    },
-    methods: {
-      toggle(key) {
-        this.openMenu = this.openMenu === key ? '' : key;
-      },
-      isOpen(key) {
-        return this.openMenu === key;
-      },
-      rotateIcon(key) {
-        return {
-          'transition-transform': true,
-          'rotate-90': this.isOpen(key)
-        };
-      },
-      linkClass(href) {
-        return [
-          'sidebar-link',
-          this.currentPath === href ? 'active-link' : ''
-        ];
-      }
-    }
-  }).mount('#sidebar-app');
-</script>
+      });
 
+      const toggleMenu = (key) => {
+        state.openMenu = state.openMenu === key ? '' : key;
+      };
+
+      const isOpen = (key) => state.openMenu === key;
+
+      const rotateIcon = (key) => ({
+        'transition-transform': true,
+        'rotate-90': isOpen(key),
+      });
+
+      const linkClass = (href) => [
+        'sidebar-link',
+        state.currentPath === href ? 'active-link' : '',
+      ];
+
+      return {
+        toggleMenu,
+        isOpen,
+        rotateIcon,
+        linkClass,
+      };
+    }
+  }).mount("#sidebar-app");
+</script>
 {{end}}
