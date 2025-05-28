@@ -12,7 +12,7 @@
         <button @click="toggle(menu.key)"
                 class="flex items-center justify-between w-full px-3 py-2 rounded hover:bg-blue-50 font-semibold text-gray-700">
           <span v-text="menu.label"></span>
-          <span :class="rotateIcon(menu.key)">▶</span>
+          <span :class="rotateIcon(menu.key)">→</span>
         </button>
         <ul v-show="isOpen(menu.key)" class="ml-4 mt-1 space-y-1">
           <li v-for="item in menu.items" :key="item.href">
