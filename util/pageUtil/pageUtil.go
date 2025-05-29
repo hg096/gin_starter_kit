@@ -2,6 +2,9 @@ package pageUtil
 
 import (
 	"fmt"
+	"gin_starter/model/core"
+	"gin_starter/util"
+	"gin_starter/util/auth"
 	"log"
 	"net/http"
 	"text/template"
@@ -23,24 +26,45 @@ type MenuGroup struct {
 
 var allMenus = []MenuGroup{
 	{
+		Key:   "dashboard",
+		Label: "기본 메뉴",
+		Items: []MenuItem{
+			{Label: "대시보드", Href: "/adm/dashboard", Roles: []string{"A", "M", "AG"}},
+		},
+	},
+	{
 		Key:   "posts",
 		Label: "게시물 관리",
 		Items: []MenuItem{
-			{Label: "공지사항", Href: "/adm/posts/notice", Roles: []string{"admin", "editor"}},
-			{Label: "자주 묻는 질문", Href: "/adm/posts/faq", Roles: []string{"admin", "editor", "viewer"}},
+			{Label: "공지사항", Href: "/adm/posts/notice", Roles: []string{"A", "M", "AG"}},
+			{Label: "자주 묻는 질문", Href: "/adm/posts/faq", Roles: []string{"A", "M", "AG"}},
 		},
 	},
 	{
 		Key:   "ads",
 		Label: "광고 관리",
 		Items: []MenuItem{
-			{Label: "배너 설정", Href: "/adm/ads/banner", Roles: []string{"admin"}},
-			{Label: "광고 승인", Href: "/adm/ads/approval", Roles: []string{"admin"}},
+			{Label: "배너 설정", Href: "/adm/ads/banner", Roles: []string{"A", "M"}},
+			{Label: "광고 승인", Href: "/adm/ads/approval", Roles: []string{"A", "M"}},
+		},
+	},
+	{
+		Key:   "settings",
+		Label: "설정",
+		Items: []MenuItem{
+			{Label: "설정", Href: "/adm/settings", Roles: []string{"A"}},
+		},
+	},
+	{
+		Key:   "logout",
+		Label: "",
+		Items: []MenuItem{
+			{Label: "로그아웃", Href: "/adm/manage/logout", Roles: []string{"A", "M", "AG"}},
 		},
 	},
 }
 
-func RenderPage(c *gin.Context, page string, customData gin.H) {
+func RenderPage(c *gin.Context, page string, customData gin.H, isCheckLogin bool) {
 
 	data := gin.H{
 		"IsLoggedIn": false,
@@ -49,7 +73,52 @@ func RenderPage(c *gin.Context, page string, customData gin.H) {
 		"Menus":      []map[string]interface{}{},
 	}
 
-	data["Menus"] = FilterMenusByRole("admin")
+	if !util.EmptyBool(isCheckLogin) {
+
+		token, err := c.Cookie("acc_token")
+		if err != nil || token == "" {
+			c.Redirect(http.StatusFound, "/adm/manage/login")
+			c.Abort()
+			return
+		}
+
+		refToken, err := c.Cookie("ref_token")
+		if err != nil || refToken == "" {
+			c.Redirect(http.StatusFound, "/adm/manage/login")
+			c.Abort()
+			return
+		}
+
+		claims, err := auth.ValidateToken(token, auth.AccessSecret, auth.TokenSecret)
+		if err != nil {
+			newAT, newRT, errMsg := auth.RefreshHandler(c, map[string]string{"refresh_token": refToken})
+			if !util.EmptyString(errMsg) {
+				util.EndResponse(c, http.StatusBadRequest, gin.H{}, errMsg)
+				return
+			}
+			claims, _ = auth.ValidateToken(newAT, auth.AccessSecret, auth.TokenSecret)
+
+			// data["NEW_AT"] = newAT
+			// data["NEW_RT"] = newRT
+
+			SetCookie(c, "acc_token", newAT, 60*15)
+			SetCookie(c, "ref_token", newRT, 60*60*24*7)
+		}
+
+		result, err := core.BuildSelectQuery(c, nil, "select u_auth_type, u_auth_level from _user where u_id = ? AND u_auth_type != 'U' ", []string{claims.JWTUserID}, "JWTAuthMiddleware.err")
+		if err != nil {
+			c.Redirect(http.StatusFound, "/adm/manage/login")
+			c.Abort()
+			return
+		}
+
+		c.Set("user_id", claims.JWTUserID)
+		c.Set("user_type", result[0]["u_auth_type"])
+		c.Set("user_level", result[0]["u_auth_level"])
+
+		data["Menus"] = FilterMenusByRole(result[0]["u_auth_type"])
+
+	}
 
 	for k, v := range customData {
 		data[k] = v
@@ -104,4 +173,16 @@ func contains(roles []string, role string) bool {
 		}
 	}
 	return false
+}
+
+func SetCookie(c *gin.Context, key string, val string, time int) {
+	c.SetCookie(
+		key,  // 쿠키 이름
+		val,  // 값
+		time, // max-age(초)
+		"/",  // path
+		"",   // domain (빈 문자열이면 Host 도메인)
+		true, // secure (https 전용)
+		true, // httpOnly
+	)
 }

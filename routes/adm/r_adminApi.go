@@ -1,4 +1,4 @@
-package api
+package adm
 
 import (
 	"fmt"
@@ -6,67 +6,25 @@ import (
 	"gin_starter/model/core"
 	"gin_starter/util"
 	"gin_starter/util/auth"
+	"gin_starter/util/pageUtil"
 	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 )
 
-func SetupUserRoutes(rg *gin.RouterGroup) {
+func SetupAdminApiRoutes(rg *gin.RouterGroup) {
 
-	// Util := util.GetInstance()
-
-	userGroup := rg.Group("/user")
+	adminApiGroup := rg.Group("/api")
 	{
 
-		userGroup.GET("/", func(c *gin.Context) { apiUser(c) })
+		adminApiGroup.POST("/make", func(c *gin.Context) { apiUserMake(c) })
 
-		userGroup.POST("/make", func(c *gin.Context) { apiUserMake(c) })
+		adminApiGroup.POST("/makeUp", func(c *gin.Context) { apiUserMakeUp(c) })
 
-		userGroup.POST("/makeUp", func(c *gin.Context) { apiUserMakeUp(c) })
-
-		userGroup.POST("/logIn", func(c *gin.Context) { apiUserLogIn(c) })
-
-		userGroup.GET("/logOut", func(c *gin.Context) { apiUserLogOut(c) })
-
-		userGroup.POST("/refresh", func(c *gin.Context) {
-			postData := util.PostFields(c, map[string][2]string{
-				"refresh_token": {"refresh_token", ""},
-			})
-			newAT, newRT, errMsg := auth.RefreshHandler(c, postData)
-			if !util.EmptyString(errMsg) {
-				util.EndResponse(c, http.StatusBadRequest, gin.H{}, errMsg)
-				return
-			}
-
-			util.EndResponse(c, http.StatusOK, gin.H{
-				"access_token":  newAT,
-				"refresh_token": newRT,
-			}, "fn auth/RefreshHandler-end")
-		})
-
-		// userGroup.Use(auth.JWTAuthMiddleware("U", 0))
-		// {
-		userGroup.GET("/profile", auth.JWTAuthMiddleware("U", 0), func(c *gin.Context) { apiUserProfile(c) })
-		// }
-
-		// userGroup.GET("/:id", func(c *gin.Context) {
-		// 	id := c.Param("id")
-		// 	c.JSON(http.StatusOK, gin.H{"message": "User detail", "id": id})
-		// })
+		adminApiGroup.POST("/logIn", func(c *gin.Context) { apiUserLogIn(c) })
 
 	}
-}
-
-//
-//
-
-// 사용자
-// apiUser godoc
-// @Summary 사용자 테스트
-// @Router /api/user/ [get]
-func apiUser(c *gin.Context) {
-	util.EndResponse(c, http.StatusOK, gin.H{"message": "User list"}, "rest /user")
 }
 
 // 가입
@@ -81,7 +39,7 @@ func apiUserMake(c *gin.Context) {
 		"user_email": {"u_email", ""},
 	})
 
-	data["u_auth_type"] = "U"
+	data["u_auth_type"] = "AG"
 
 	// 트랜젝션 예시 불필요할시 제거
 	tx, err := core.BeginTransaction(c)
@@ -148,24 +106,9 @@ func apiUserLogIn(c *gin.Context) {
 		return
 	}
 
-	util.EndResponse(c, http.StatusOK, gin.H{"access_token": at, "refresh_token": rt}, "rest /user/login")
-}
+	pageUtil.SetCookie(c, "acc_token", at, 60*15)
+	pageUtil.SetCookie(c, "ref_token", rt, 60*60*24*7)
 
-// 로그아웃
-func apiUserLogOut(c *gin.Context) {
-
-	// refToken, _ := c.Cookie("ref_token")
-	userId, _ := util.GetContextVal(c, "user_id")
-
-	_, _ = core.BuildUpdateQuery(c, nil, "_user", map[string]string{"u_re_token": ""}, "u_id = ?", []string{userId}, "apiUserLogOut-BuildUpdateQuery")
-
-	util.EndResponse(c, http.StatusOK, gin.H{"message": "User logout"}, "rest /user/logout")
-}
-
-// 프로필 조회
-func apiUserProfile(c *gin.Context) {
-	uid := util.GetBindField(c, "user_id", "")
-	userID := c.MustGet("user_id").(string)
-
-	util.EndResponse(c, 200, gin.H{"user": uid, "userID": userID}, "rest /user/profile")
+	// c.Redirect(http.StatusFound, "/adm")
+	util.EndResponse(c, http.StatusOK, gin.H{}, "rest /user/login")
 }

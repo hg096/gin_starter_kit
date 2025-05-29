@@ -4,38 +4,34 @@
 
   <nav class="px-4" id="sidebar-app" v-cloak>
     <ul class="space-y-2 text-sm">
-      <li>
-        <a :class="linkClass('/adm/dashboard')" href="/adm/dashboard" class="sidebar-link">대시보드</a>
-      </li>
-
-      {{range .Menus}}
-      <li>
-        <button
-          @click="toggleMenu('{{.Key}}')"
-          class="flex items-center justify-between w-full px-3 py-2 font-semibold text-gray-700 hover:bg-blue-50"
-        >
-          <span>{{.Label}}</span>
-          <span :class="rotateIcon('{{.Key}}')">→</span>
-        </button>
-        <ul v-show="isOpen('{{.Key}}')" class="ml-4 mt-1 space-y-1">
-          {{range .Items}}
-          <li>
-            <a :class="linkClass('{{.Href}}')" href="{{.Href}}" class="sidebar-link">
-              <span>{{.Label}}</span>
-            </a>
-          </li>
-          {{end}}
-        </ul>
-      </li>
-      {{end}}
-
-      <li>
-        <a :class="linkClass('/adm/settings')" href="/adm/settings" class="sidebar-link">설정</a>
-      </li>
-
-      <li>
-        <a href="/adm/manage/logout" class="block px-3 py-2 text-red-500 hover:text-red-700">로그아웃</a>
-      </li>
+			{{range .Menus}}
+				{{if .Label}}
+					<li>
+						<button @click="toggleMenu('{{.Key}}')" class="flex items-center justify-between w-full px-3 py-2 rounded hover:bg-blue-50 font-semibold text-gray-700">
+							<span>{{.Label}}</span>
+							<span :class="rotateIcon('{{.Key}}')">▶</span>
+						</button>
+						<ul v-show="isOpen('{{.Key}}')" class="ml-4 mt-1 space-y-1">
+							{{range .Items}}
+								<li>
+									<a :href="{{printf "'%s'" .Href}}" :class="linkClass('{{.Href}}')" class="sidebar-link">
+										<span>{{.Label}}</span>
+									</a>
+								</li>
+							{{end}}
+						</ul>
+					</li>
+				{{else}}
+					<!-- 라벨이 없는 경우 (ex: 로그아웃) -->
+					{{range .Items}}
+						<li>
+							<a href="{{.Href}}" class="block px-3 py-2 text-red-500 hover:text-red-700">
+								<span>{{.Label}}</span>
+							</a>
+						</li>
+					{{end}}
+				{{end}}
+			{{end}}
     </ul>
   </nav>
 </aside>

@@ -73,6 +73,16 @@ func EmptyPtr[T any](p *T) bool {
 	return p == nil
 }
 
+// c 에 저장한 값 가져오기
+func GetContextVal(c *gin.Context, target string) (string, bool) {
+	val, ok := c.Get(target)
+	if !ok {
+		return "", false
+	}
+	result, ok := val.(string)
+	return result, ok
+}
+
 func EndResponse(c *gin.Context, status int, jsonObj gin.H, debug string) {
 	if gin.Mode() != gin.ReleaseMode {
 		jsonObj["messageDebug"] = debug

@@ -232,51 +232,43 @@ func GenerateTokens(userID string, refreshTokenPrev string) (accessToken string,
 }
 
 // RefreshHandler은 POST /refresh 에 매핑할 수 있는 Gin 핸들러 JSON 바디로 받은 { "refresh_token": "..." } 를 검사해 새 토큰을 발급
-func RefreshHandler(c *gin.Context) {
+func RefreshHandler(c *gin.Context, postData map[string]string) (accessToken string, refreshToken string, errMsg string) {
 
-	postData := util.PostFields(c, map[string][2]string{
-		"refresh_token": {"refresh_token", ""},
-	})
+	// postData := util.PostFields(c, map[string][2]string{
+	// 	"refresh_token": {"refresh_token", ""},
+	// })
 
 	if postData["refresh_token"] == "" {
-		util.EndResponse(c, http.StatusBadRequest, gin.H{}, "fn auth/RefreshHandler-missingToken")
-		return
+		return "", "", "fn auth/RefreshHandler-missingToken"
 	}
 
-	fmt.Println("RefreshHandler postData")
-	fmt.Println(postData["refresh_token"])
+	// fmt.Println("RefreshHandler postData")
+	// fmt.Println(postData["refresh_token"])
 
 	// 리프레시 토큰 검증
 	claims, err := ValidateToken(postData["refresh_token"], RefreshSecret, TokenSecret)
 	if err != nil {
-		util.EndResponse(c, http.StatusBadRequest, gin.H{}, "fn auth/RefreshHandler-ValidateToken")
-		return
+		return "", "", "fn auth/RefreshHandler-missingToken"
 	}
 
 	// 디비 검증
 	resultUser, err := core.BuildSelectQuery(c, nil, "select u_re_token from _user where u_re_token = ? ", []string{postData["refresh_token"]}, "RefreshHandler.err")
 	if err != nil || util.EmptyString(resultUser[0]["u_re_token"]) {
-		util.EndResponse(c, http.StatusBadRequest, gin.H{}, "fn auth/RefreshHandler-BuildSelectQuery")
-		return
+		return "", "", "fn auth/RefreshHandler-BuildSelectQuery"
 	}
 
 	// 새 토큰 생성
 	newAT, newRT, err := GenerateTokens(claims.JWTUserID, postData["refresh_token"])
 	if err != nil {
-		util.EndResponse(c, http.StatusBadRequest, gin.H{}, "fn auth/RefreshHandler-GenerateTokens")
-		return
+		return "", "", "fn auth/RefreshHandler-GenerateTokens"
 	}
 
 	_, err = core.BuildUpdateQuery(c, nil, "_user", map[string]string{"u_re_token": newRT}, "u_re_token = ?", []string{postData["refresh_token"]}, "fn auth/RefreshHandler-BuildUpdateQuery")
 	if err != nil {
-		util.EndResponse(c, http.StatusBadRequest, gin.H{}, "fn auth/RefreshHandler-BuildUpdateQuery")
-		return
+		return "", "", "fn auth/RefreshHandler-BuildUpdateQuery"
 	}
 
-	util.EndResponse(c, http.StatusOK, gin.H{
-		"access_token":  newAT,
-		"refresh_token": newRT,
-	}, "fn auth/RefreshHandler-end")
+	return newAT, newRT, ""
 }
 
 // 미들웨어 엑세스 토큰 검증 - 사용자 타입, 레벨
@@ -304,9 +296,10 @@ func JWTAuthMiddleware(userType string, lv int) gin.HandlerFunc {
 		// 사용자 타입 찾기
 		if result[0]["u_auth_type"] != userType {
 			// 만약에 타입이 두가지 이상 들어가야할때
-			// index := strings.Index(userType, result[0]["u_auth_type"])
-			// if index < 0 {
-			util.EndResponse(c, http.StatusBadRequest, gin.H{}, "fn auth/JWTAuthMiddleware-type")
+			index := strings.Index(userType, result[0]["u_auth_type"])
+			if index < 0 {
+				util.EndResponse(c, http.StatusBadRequest, gin.H{}, "fn auth/JWTAuthMiddleware-type")
+			}
 			return
 		}
 

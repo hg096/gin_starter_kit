@@ -30,7 +30,10 @@ func SetupRoutes(r *gin.Engine) {
 	admGroup := r.Group("/adm")
 	{
 
+		// 관리자 페이지 등록
 		adm.SetupAdminRoutes(admGroup)
+		// 관리자 api 등록
+		adm.SetupAdminApiRoutes(admGroup)
 	}
 
 	apiGroup := r.Group("/api")
