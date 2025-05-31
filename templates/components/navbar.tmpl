@@ -19,23 +19,23 @@
               <span>{{.Label}}</span>
               <span :class="rotateIcon('{{.ID}}')">▼</span>
             </button>
-            <ul v-show="isOpen('{{.ID}}')" class="ml-4 mt-1 space-y-1">
+            <ul v-show="isOpen('{{.ID}}')" class="ml-4 mt-1 space-y-1 rounded p-2 bg-[#f8f8ff]">
               {{range .Items}}
-                <li>
-                  <a :href="{{printf "'%s'" .Href}}" :class="linkClass('{{.Href}}')" class="sidebar-link">
+                <a :href="{{printf "'%s'" .Href}}" :class="linkClass('{{.Href}}')" class="sidebar-link text-sm font-semibold text-gray-700">
+                  <li class="my-2">
                     <span>{{.Label}}</span>
-                  </a>
-                </li>
+                  </li>
+                </a>
               {{end}}
             </ul>
           </li>
         {{else}}
           {{range .Items}}
-            <li>
-              <a href="{{.Href}}" class="block px-3 py-2">
+            <a href="{{.Href}}" class="block px-3 py-2 text-sm font-semibold text-gray-700">
+              <li>
                 <span>{{.Label}}</span>
-              </a>
-            </li>
+              </li>
+            </a>
           {{end}}
         {{end}}
       {{end}}

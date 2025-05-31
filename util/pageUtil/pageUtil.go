@@ -101,7 +101,7 @@ func RenderPageCheckLogin(c *gin.Context, isCheckLogin bool) []map[string]interf
 func RenderPage(c *gin.Context, page string, customData gin.H) {
 
 	data := gin.H{
-		"IsLoggedIn": false,
+		"IsLoggedIn": true,
 		"UserName":   "",
 		"ShowFooter": true,
 		"Menus":      []map[string]interface{}{},
@@ -130,78 +130,59 @@ func RenderPage(c *gin.Context, page string, customData gin.H) {
 }
 
 func FilterMenusByRole(data []map[string]string, userRole string) []map[string]interface{} {
-
 	groupMap := map[string]map[string]interface{}{}
+	orderMap := map[string]bool{}
 	orderList := []string{}
 
-	// 1차 그룹생성
 	for _, row := range data {
+		roles := []string{}
+		if err := json.Unmarshal([]byte(row["item_roles"]), &roles); err != nil || !contains(roles, userRole) {
+			continue
+		}
+
 		groupID := row["group_id"]
 		itemOrder := row["item_order"]
-
-		if _, exists := groupMap[groupID]; !exists {
-			if !util.EmptyString(groupID) {
-				groupMap[groupID] = map[string]interface{}{
-					"ID":    groupID,
-					"Label": row["group_label"],
-					"Order": row["group_order"],
-					"Items": []map[string]string{},
-				}
-				orderList = append(orderList, groupID)
-			} else {
-				orderList = append(orderList, itemOrder)
-			}
-		}
-	}
-
-	for _, row := range data {
-		itemOrder := row["item_order"]
-		roles := []string{}
-		if err := json.Unmarshal([]byte(row["item_roles"]), &roles); err != nil {
-			continue
-		}
-
-		if !contains(roles, userRole) {
-			continue
-		}
-
 		item := map[string]string{
 			"ID":    row["item_id"],
 			"Label": row["item_label"],
 			"Href":  row["item_href"],
-			"Order": row["item_order"],
+			"Order": itemOrder,
 		}
 
-		groupID := row["item_group"]
-		if group, exists := groupMap[groupID]; exists {
-			group["Items"] = append(group["Items"].([]map[string]string), item)
-		} else {
-			groupMap[itemOrder] = map[string]interface{}{
-				"ID":    itemOrder,
-				"Label": "",
-				"Order": itemOrder,
-				"Items": []map[string]string{{
-					"ID":    row["item_id"],
-					"Label": row["item_label"],
-					"Href":  row["item_href"],
-					"Order": itemOrder,
-				}},
+		key := groupID
+		if util.EmptyString(groupID) {
+			key = itemOrder // 그룹이 없을 경우 itemOrder 기준 그룹화
+		}
+
+		if _, exists := groupMap[key]; !exists {
+			groupMap[key] = map[string]interface{}{
+				"ID":    key,
+				"Label": row["group_label"],
+				"Order": row["group_order"],
+				"Items": []map[string]string{},
 			}
+			if util.EmptyString(groupID) {
+				groupMap[key]["Label"] = ""
+				groupMap[key]["Order"] = itemOrder
+			}
+		}
+
+		groupMap[key]["Items"] = append(groupMap[key]["Items"].([]map[string]string), item)
+
+		// 중복된 순서 방지
+		if !orderMap[key] {
+			orderList = append(orderList, key)
+			orderMap[key] = true
 		}
 	}
 
-	var result []map[string]interface{}
-
-	for _, id := range orderList {
-		if group, exists := groupMap[id]; exists {
-			if len(group["Items"].([]map[string]string)) > 0 {
-				result = append(result, group)
-			}
+	// 결과 정렬 순서대로 재구성
+	result := make([]map[string]interface{}, 0, len(orderList))
+	for _, key := range orderList {
+		if len(groupMap[key]["Items"].([]map[string]string)) > 0 {
+			result = append(result, groupMap[key])
 		}
 	}
-
-	// log.Println("FilterMenusByRole END ")
-	// log.Println(result)
 
 	return result
 }
