@@ -3,19 +3,21 @@
 {{define "title"}}로그인 페이지{{ end }}
 
 {{define "content"}}
-<div class="bg-white p-8 rounded shadow-md" id="app">
-	<h2 class="text-2xl font-bold mb-6 text-center">로그인</h2>
+<div class="min-h-screen flex items-center justify-center px-3">
+	<div class="bg-white p-8 rounded shadow-md w-full max-w-[600px]" id="app">
+		<h2 class="text-2xl font-bold mb-6 text-center">로그인</h2>
 
-	<div>
-		<label class="block mb-1 text-sm font-semibold">아이디</label>
-		<input v-model="userId" type="text" class="w-full p-2 border rounded mb-4" placeholder="아이디 입력" />
+		<div>
+			<label class="block mb-1 text-sm font-semibold">아이디</label>
+			<input v-model="userId" type="text" class="w-full p-2 border rounded mb-4" placeholder="아이디 입력" />
 
-		<label class="block mb-1 text-sm font-semibold">비밀번호</label>
-		<input v-model="password" type="password" class="w-full p-2 border rounded mb-4" placeholder="비밀번호 입력" />
+			<label class="block mb-1 text-sm font-semibold">비밀번호</label>
+			<input v-model="password" type="password" class="w-full p-2 border rounded mb-4" placeholder="비밀번호 입력" />
 
-		<button @click="login" class="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700">로그인</button>
+			<button @click="login" class="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700">로그인</button>
 
-		<p class="text-red-500 mt-2 text-sm" v-if="error" v-text="error"></p>
+			<p class="text-red-500 mt-2 text-sm" v-if="error" v-text="error"></p>
+		</div>
 	</div>
 </div>
 

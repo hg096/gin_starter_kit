@@ -234,10 +234,6 @@ func GenerateTokens(userID string, refreshTokenPrev string) (accessToken string,
 // RefreshHandler은 POST /refresh 에 매핑할 수 있는 Gin 핸들러 JSON 바디로 받은 { "refresh_token": "..." } 를 검사해 새 토큰을 발급
 func RefreshHandler(c *gin.Context, postData map[string]string) (accessToken string, refreshToken string, errMsg string) {
 
-	// postData := util.PostFields(c, map[string][2]string{
-	// 	"refresh_token": {"refresh_token", ""},
-	// })
-
 	if postData["refresh_token"] == "" {
 		return "", "", "fn auth/RefreshHandler-missingToken"
 	}

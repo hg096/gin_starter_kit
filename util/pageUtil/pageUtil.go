@@ -1,6 +1,7 @@
 package pageUtil
 
 import (
+	"encoding/json"
 	"fmt"
 	"gin_starter/model/core"
 	"gin_starter/util"
@@ -24,69 +25,22 @@ type MenuGroup struct {
 	Items []MenuItem
 }
 
-var allMenus = []MenuGroup{
-	{
-		Key:   "dashboard",
-		Label: "기본 메뉴",
-		Items: []MenuItem{
-			{Label: "대시보드", Href: "/adm/dashboard", Roles: []string{"A", "M", "AG"}},
-		},
-	},
-	{
-		Key:   "posts",
-		Label: "게시물 관리",
-		Items: []MenuItem{
-			{Label: "공지사항", Href: "/adm/posts/notice", Roles: []string{"A", "M", "AG"}},
-			{Label: "자주 묻는 질문", Href: "/adm/posts/faq", Roles: []string{"A", "M", "AG"}},
-		},
-	},
-	{
-		Key:   "ads",
-		Label: "광고 관리",
-		Items: []MenuItem{
-			{Label: "배너 설정", Href: "/adm/ads/banner", Roles: []string{"A", "M"}},
-			{Label: "광고 승인", Href: "/adm/ads/approval", Roles: []string{"A", "M"}},
-		},
-	},
-	{
-		Key:   "settings",
-		Label: "설정",
-		Items: []MenuItem{
-			{Label: "설정", Href: "/adm/settings", Roles: []string{"A"}},
-		},
-	},
-	{
-		Key:   "logout",
-		Label: "",
-		Items: []MenuItem{
-			{Label: "로그아웃", Href: "/adm/manage/logout", Roles: []string{"A", "M", "AG"}},
-		},
-	},
-}
-
-func RenderPage(c *gin.Context, page string, customData gin.H, isCheckLogin bool) {
-
-	data := gin.H{
-		"IsLoggedIn": false,
-		"UserName":   "",
-		"ShowFooter": true,
-		"Menus":      []map[string]interface{}{},
-	}
-
+// 로그인 체크, 토큰 체크, 만료시 쿠키갱신, 메뉴리턴
+func RenderPageCheckLogin(c *gin.Context, isCheckLogin bool) []map[string]interface{} {
 	if !util.EmptyBool(isCheckLogin) {
 
-		token, err := c.Cookie("acc_token")
-		if err != nil || token == "" {
-			c.Redirect(http.StatusFound, "/adm/manage/login")
-			c.Abort()
-			return
-		}
+		token, _ := c.Cookie("acc_token")
+		// if err != nil || token == "" {
+		// 	c.Redirect(http.StatusFound, "/adm/manage/login")
+		// 	c.Abort()
+		// 	return nil
+		// }
 
 		refToken, err := c.Cookie("ref_token")
 		if err != nil || refToken == "" {
 			c.Redirect(http.StatusFound, "/adm/manage/login")
 			c.Abort()
-			return
+			return nil
 		}
 
 		claims, err := auth.ValidateToken(token, auth.AccessSecret, auth.TokenSecret)
@@ -94,7 +48,7 @@ func RenderPage(c *gin.Context, page string, customData gin.H, isCheckLogin bool
 			newAT, newRT, errMsg := auth.RefreshHandler(c, map[string]string{"refresh_token": refToken})
 			if !util.EmptyString(errMsg) {
 				util.EndResponse(c, http.StatusBadRequest, gin.H{}, errMsg)
-				return
+				return nil
 			}
 			claims, _ = auth.ValidateToken(newAT, auth.AccessSecret, auth.TokenSecret)
 
@@ -109,15 +63,48 @@ func RenderPage(c *gin.Context, page string, customData gin.H, isCheckLogin bool
 		if err != nil {
 			c.Redirect(http.StatusFound, "/adm/manage/login")
 			c.Abort()
-			return
+			return nil
 		}
 
 		c.Set("user_id", claims.JWTUserID)
 		c.Set("user_type", result[0]["u_auth_type"])
 		c.Set("user_level", result[0]["u_auth_level"])
 
-		data["Menus"] = FilterMenusByRole(result[0]["u_auth_type"])
+		resultMenu, err := core.BuildSelectQuery(c, nil, `
+			SELECT
+				mg.mg_idx AS group_id,
+				mg.mg_label AS group_label,
+				mg.mg_order AS group_order,
 
+ 				mi.mi_group_id AS item_group,
+				mi.mi_idx AS item_id,
+				mi.mi_label AS item_label,
+				mi.mi_href AS item_href,
+				mi.mi_roles AS item_roles,
+				mi.mi_order AS item_order
+			FROM _menu_items mi
+			LEFT JOIN _menu_groups mg ON mg.mg_idx = mi.mi_group_id
+			ORDER BY IFNULL(mg.mg_order, mi.mi_order), mi.mi_order`, []string{}, "get Menu sql err")
+		if err != nil {
+			c.Redirect(http.StatusFound, "/adm/manage/login")
+			c.Abort()
+			return nil
+		}
+
+		return FilterMenusByRole(resultMenu, result[0]["u_auth_type"])
+	}
+
+	return nil
+}
+
+// 페이지 출력
+func RenderPage(c *gin.Context, page string, customData gin.H) {
+
+	data := gin.H{
+		"IsLoggedIn": false,
+		"UserName":   "",
+		"ShowFooter": true,
+		"Menus":      []map[string]interface{}{},
 	}
 
 	for k, v := range customData {
@@ -142,28 +129,81 @@ func RenderPage(c *gin.Context, page string, customData gin.H, isCheckLogin bool
 	tmpl.ExecuteTemplate(c.Writer, "layout", data)
 }
 
-func FilterMenusByRole(userRole string) []map[string]interface{} {
-	filtered := []map[string]interface{}{}
+func FilterMenusByRole(data []map[string]string, userRole string) []map[string]interface{} {
 
-	for _, group := range allMenus {
-		groupItems := []map[string]string{}
-		for _, item := range group.Items {
-			if contains(item.Roles, userRole) {
-				groupItems = append(groupItems, map[string]string{
-					"Label": item.Label,
-					"Href":  item.Href,
-				})
+	groupMap := map[string]map[string]interface{}{}
+	orderList := []string{}
+
+	// 1차 그룹생성
+	for _, row := range data {
+		groupID := row["group_id"]
+		itemOrder := row["item_order"]
+
+		if _, exists := groupMap[groupID]; !exists {
+			if !util.EmptyString(groupID) {
+				groupMap[groupID] = map[string]interface{}{
+					"ID":    groupID,
+					"Label": row["group_label"],
+					"Order": row["group_order"],
+					"Items": []map[string]string{},
+				}
+				orderList = append(orderList, groupID)
+			} else {
+				orderList = append(orderList, itemOrder)
 			}
 		}
-		if len(groupItems) > 0 {
-			filtered = append(filtered, map[string]interface{}{
-				"Key":   group.Key,
-				"Label": group.Label,
-				"Items": groupItems,
-			})
+	}
+
+	for _, row := range data {
+		itemOrder := row["item_order"]
+		roles := []string{}
+		if err := json.Unmarshal([]byte(row["item_roles"]), &roles); err != nil {
+			continue
+		}
+
+		if !contains(roles, userRole) {
+			continue
+		}
+
+		item := map[string]string{
+			"ID":    row["item_id"],
+			"Label": row["item_label"],
+			"Href":  row["item_href"],
+			"Order": row["item_order"],
+		}
+
+		groupID := row["item_group"]
+		if group, exists := groupMap[groupID]; exists {
+			group["Items"] = append(group["Items"].([]map[string]string), item)
+		} else {
+			groupMap[itemOrder] = map[string]interface{}{
+				"ID":    itemOrder,
+				"Label": "",
+				"Order": itemOrder,
+				"Items": []map[string]string{{
+					"ID":    row["item_id"],
+					"Label": row["item_label"],
+					"Href":  row["item_href"],
+					"Order": itemOrder,
+				}},
+			}
 		}
 	}
-	return filtered
+
+	var result []map[string]interface{}
+
+	for _, id := range orderList {
+		if group, exists := groupMap[id]; exists {
+			if len(group["Items"].([]map[string]string)) > 0 {
+				result = append(result, group)
+			}
+		}
+	}
+
+	// log.Println("FilterMenusByRole END ")
+	// log.Println(result)
+
+	return result
 }
 
 func contains(roles []string, role string) bool {

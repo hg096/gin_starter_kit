@@ -1,14 +1,108 @@
 {{define "navbar"}}
-<nav class="fixed top-0 left-0 w-full z-50 bg-white shadow-md px-6 py-3 flex justify-between items-center">
-  <a href="/adm" class="text-xl font-bold text-blue-600 hover:text-blue-800">MySite</a>
+<nav class="fixed top-0 left-0 right-0 z-50 bg-white  shadow-md md:hidden" id="navbar">
+  <div class="flex items-center justify-between p-4 text-blue-600 font-bold text-lg border-b">
+    관리자 메뉴
+    <button @click="toggleNavbar()" class="focus:outline-none">
+      <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+          d="M4 6h16M4 12h16M4 18h16" />
+      </svg>
+    </button>
+  </div>
 
-  <div class="space-x-4 text-sm">
-    {{if .IsLoggedIn}}
-      <span class="text-gray-700">{{.UserName}} 님 환영합니다!</span>
-      <a href="/adm/manage/logout" class="text-red-500 hover:text-red-700 font-semibold">로그아웃</a>
-    {{else}}
-      <a href="/adm/manage/login" class="text-blue-600 hover:text-blue-800 font-semibold">로그인</a>
-    {{end}}
+  <div v-show="navbarOpen" class="px-3 py-2 text-sm transition-all duration-300 bg-white ">
+    <ul class="space-y-2">
+      {{range .Menus}}
+        {{if and (ne .Label "") (ne .Label "없음")}}
+          <li>
+            <button @click="toggleMenu('{{.ID}}')" class="flex items-center justify-between w-full px-3 py-2 rounded hover:bg-blue-50 font-semibold text-gray-700">
+              <span>{{.Label}}</span>
+              <span :class="rotateIcon('{{.ID}}')">▼</span>
+            </button>
+            <ul v-show="isOpen('{{.ID}}')" class="ml-4 mt-1 space-y-1">
+              {{range .Items}}
+                <li>
+                  <a :href="{{printf "'%s'" .Href}}" :class="linkClass('{{.Href}}')" class="sidebar-link">
+                    <span>{{.Label}}</span>
+                  </a>
+                </li>
+              {{end}}
+            </ul>
+          </li>
+        {{else}}
+          {{range .Items}}
+            <li>
+              <a href="{{.Href}}" class="block px-3 py-2">
+                <span>{{.Label}}</span>
+              </a>
+            </li>
+          {{end}}
+        {{end}}
+      {{end}}
+    </ul>
   </div>
 </nav>
+
+<style>
+  [v-cloak] {
+    display: none;
+  }
+
+  .sidebar-link {
+    @apply block px-3 py-2 rounded hover:bg-blue-50;
+  }
+
+  .active-link {
+    @apply bg-blue-100 text-blue-700 font-semibold;
+  }
+
+  .rotate-90 {
+    transform: rotate(90deg);
+  }
+</style>
+
+<script>
+(function () {
+  const { createApp, reactive, computed } = Vue;
+
+  createApp({
+    setup() {
+      const state = reactive({
+        openMenu: '',
+        currentPath: window.location.pathname,
+        navbarOpen: false,
+      });
+
+      const toggleNavbar = () => {
+        state.navbarOpen = !state.navbarOpen;
+      };
+
+      const toggleMenu = (ID) => {
+        state.openMenu = state.openMenu === ID ? '' : ID;
+      };
+
+      const isOpen = (ID) => state.openMenu === ID;
+
+      const rotateIcon = (ID) => ({
+        'transition-transform': true,
+        'rotate-90': isOpen(ID),
+      });
+
+      const linkClass = (href) => [
+        'sidebar-link',
+        state.currentPath === href ? 'active-link' : '',
+      ];
+
+      return {
+        toggleNavbar,
+        toggleMenu,
+        isOpen,
+        rotateIcon,
+        linkClass,
+        navbarOpen: computed(() => state.navbarOpen), // 핵심 변경
+      };
+    }
+  }).mount("#navbar");
+})();
+</script>
 {{end}}

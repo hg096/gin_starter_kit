@@ -60,6 +60,7 @@ func NewUpUser() *UserUpdate {
 func (u *UserInsert) Insert(c *gin.Context, tx *sql.Tx,
 	data map[string]string, errWhere string) (int64, error, error) {
 
+	// 유효성검사 시작
 	fieldMap := map[string]*string{
 		"u_id":    &u.id,
 		"u_pass":  &u.pass,
@@ -72,6 +73,7 @@ func (u *UserInsert) Insert(c *gin.Context, tx *sql.Tx,
 	if core.HandleValidationError(c, tx, err, u.ValidateConverts) {
 		return 0, err, nil
 	}
+	// 유효성 검사 종료
 
 	pass := data["u_pass"]
 	hashedPass, err := bcrypt.GenerateFromPassword([]byte(pass), bcrypt.DefaultCost)
@@ -93,6 +95,7 @@ func (u *UserInsert) Insert(c *gin.Context, tx *sql.Tx,
 func (u *UserUpdate) Update(c *gin.Context, tx *sql.Tx,
 	data map[string]string, where string, whereData []string, errWhere string) (error, error) {
 
+	// 유효성검사 시작
 	fieldMap := map[string]*string{
 		"u_id":    &u.id,
 		"u_pass":  &u.pass,
@@ -105,6 +108,7 @@ func (u *UserUpdate) Update(c *gin.Context, tx *sql.Tx,
 	if core.HandleValidationError(c, tx, err, u.ValidateConverts) {
 		return err, nil
 	}
+	// 유효성 검사 종료
 
 	if !util.EmptyString(data["u_pass"]) {
 		pass := data["u_pass"]
@@ -114,6 +118,8 @@ func (u *UserUpdate) Update(c *gin.Context, tx *sql.Tx,
 		}
 		data["u_pass"] = string(hashedPass)
 	}
+
+	// 변경되면 안되는 데이터 제외
 	delete(data, "u_id")
 	delete(data, "u_auth_type")
 

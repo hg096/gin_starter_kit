@@ -29,21 +29,7 @@ func SetupUserRoutes(rg *gin.RouterGroup) {
 
 		userGroup.GET("/logOut", func(c *gin.Context) { apiUserLogOut(c) })
 
-		userGroup.POST("/refresh", func(c *gin.Context) {
-			postData := util.PostFields(c, map[string][2]string{
-				"refresh_token": {"refresh_token", ""},
-			})
-			newAT, newRT, errMsg := auth.RefreshHandler(c, postData)
-			if !util.EmptyString(errMsg) {
-				util.EndResponse(c, http.StatusBadRequest, gin.H{}, errMsg)
-				return
-			}
-
-			util.EndResponse(c, http.StatusOK, gin.H{
-				"access_token":  newAT,
-				"refresh_token": newRT,
-			}, "fn auth/RefreshHandler-end")
-		})
+		userGroup.POST("/refresh", func(c *gin.Context) { refreshUserToken(c) })
 
 		// userGroup.Use(auth.JWTAuthMiddleware("U", 0))
 		// {
@@ -160,6 +146,23 @@ func apiUserLogOut(c *gin.Context) {
 	_, _ = core.BuildUpdateQuery(c, nil, "_user", map[string]string{"u_re_token": ""}, "u_id = ?", []string{userId}, "apiUserLogOut-BuildUpdateQuery")
 
 	util.EndResponse(c, http.StatusOK, gin.H{"message": "User logout"}, "rest /user/logout")
+}
+
+// 토큰 재발급
+func refreshUserToken(c *gin.Context) {
+
+	postData := util.PostFields(c, map[string][2]string{
+		"refresh_token": {"refresh_token", ""},
+	})
+	newAT, newRT, errMsg := auth.RefreshHandler(c, postData)
+	if !util.EmptyString(errMsg) {
+		util.EndResponse(c, http.StatusBadRequest, gin.H{}, errMsg)
+		return
+	}
+	util.EndResponse(c, http.StatusOK, gin.H{
+		"access_token":  newAT,
+		"refresh_token": newRT,
+	}, "fn auth/RefreshHandler-end")
 }
 
 // 프로필 조회
