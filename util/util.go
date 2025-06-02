@@ -101,7 +101,7 @@ func cacheJSONBody(c *gin.Context) map[string]interface{} {
 	return body
 }
 
-// BindField는 POST/PUT 요청에서 key에 해당하는 값을 JSON 바디, 폼, 쿼리 순으로 찾아 반환
+// BindField는 POST·PUT·DELETE 요청에서 key에 해당하는 값을 JSON 바디, 폼, 쿼리 순으로 찾아 반환
 func PostBindField(c *gin.Context, key string, defaultValue string) string {
 
 	// JSON 바디 캐시에서 조회
@@ -129,7 +129,7 @@ func PostBindField(c *gin.Context, key string, defaultValue string) string {
 	return defaultValue
 }
 
-// POST 한번에 처리 - map[string][2]string{ "findKey":{"insertKey","defaultValue"}, }
+// POST·PUT·DELETE 한번에 처리 - map[string][2]string{ "findKey":{"insertKey","defaultValue"}, }
 func PostFields(c *gin.Context, defaults map[string][2]string) map[string]string {
 	out := make(map[string]string, len(defaults))
 	for key, def := range defaults {

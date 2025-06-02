@@ -165,6 +165,7 @@ func EndTransactionCommit(tx *sql.Tx) error {
 	return nil
 }
 
+// select 문
 func BuildSelectQuery(c *gin.Context, tx *sql.Tx,
 	query string, args []string, errWhere string) ([]map[string]string, error) {
 
@@ -214,6 +215,7 @@ func BuildSelectQuery(c *gin.Context, tx *sql.Tx,
 	return results, nil
 }
 
+// insert 문
 func BuildInsertQuery(c *gin.Context, tx *sql.Tx,
 	tableName string, data map[string]string, errWhere string) (int64, error) {
 
@@ -251,6 +253,7 @@ func BuildInsertQuery(c *gin.Context, tx *sql.Tx,
 	return insertedID, nil
 }
 
+// update 문
 func BuildUpdateQuery(c *gin.Context, tx *sql.Tx,
 	tableName string, updateData map[string]string, whereClause string, whereArgs []string, errWhere string) (sql.Result, error) {
 
@@ -313,6 +316,7 @@ func BuildUpdateQuery(c *gin.Context, tx *sql.Tx,
 	return result, nil
 }
 
+// delete 문
 func BuildDeleteQuery(c *gin.Context, tx *sql.Tx,
 	tableName string, whereClause string, whereArgs []string, errWhere string) (sql.Result, error) {
 	if db.Conn == nil {
@@ -331,6 +335,7 @@ func BuildDeleteQuery(c *gin.Context, tx *sql.Tx,
 	return result, nil
 }
 
+// insert 멀티
 func BuildInsertQueryMulti(c *gin.Context, tx *sql.Tx,
 	tableName string, dataList []map[string]string, errWhere string) (sql.Result, error) {
 

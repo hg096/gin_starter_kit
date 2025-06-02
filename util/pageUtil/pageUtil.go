@@ -25,8 +25,40 @@ type MenuGroup struct {
 	Items []MenuItem
 }
 
+// 페이지 출력
+func RenderPage(c *gin.Context, page string, customData gin.H) {
+
+	data := gin.H{
+		"IsLoggedIn": true,
+		"UserName":   "",
+		"ShowFooter": true,
+		"Menus":      []map[string]interface{}{},
+	}
+
+	for k, v := range customData {
+		data[k] = v
+	}
+
+	tmpl, err := template.ParseFiles(
+		"templates/adm/layouts/layout.tmpl",
+		fmt.Sprintf("templates/adm/pages/%s.tmpl", page),
+		"templates/adm/components/navbar.tmpl",
+		"templates/adm/components/sidebar.tmpl",
+		"templates/adm/components/footer.tmpl",
+	)
+	if err != nil {
+		log.Fatalf("[종료] 템플릿 로딩 실패: %v", err)
+	}
+
+	// log.Println("RenderPage ")
+	// log.Println(data)
+
+	c.Status(http.StatusOK)
+	tmpl.ExecuteTemplate(c.Writer, "layout", data)
+}
+
 // 로그인 체크, 토큰 체크, 만료시 쿠키갱신, 메뉴리턴
-func RenderPageCheckLogin(c *gin.Context, isCheckLogin bool) []map[string]interface{} {
+func RenderPageCheckLogin(c *gin.Context, isCheckLogin bool, isMakeMenu bool, isOutRole bool) []map[string]interface{} {
 	if !util.EmptyBool(isCheckLogin) {
 
 		token, _ := c.Cookie("acc_token")
@@ -70,7 +102,9 @@ func RenderPageCheckLogin(c *gin.Context, isCheckLogin bool) []map[string]interf
 		c.Set("user_type", result[0]["u_auth_type"])
 		c.Set("user_level", result[0]["u_auth_level"])
 
-		resultMenu, err := core.BuildSelectQuery(c, nil, `
+		if !util.EmptyBool(isMakeMenu) {
+
+			resultMenu, err := core.BuildSelectQuery(c, nil, `
 			SELECT
 				mg.mg_idx AS group_id,
 				mg.mg_label AS group_label,
@@ -85,51 +119,25 @@ func RenderPageCheckLogin(c *gin.Context, isCheckLogin bool) []map[string]interf
 			FROM _menu_items mi
 			LEFT JOIN _menu_groups mg ON mg.mg_idx = mi.mi_group_id
 			ORDER BY IFNULL(mg.mg_order, mi.mi_order), mi.mi_order`, []string{}, "get Menu sql err")
-		if err != nil {
-			c.Redirect(http.StatusFound, "/adm/manage/login")
-			c.Abort()
+			if err != nil {
+				c.Redirect(http.StatusFound, "/adm/manage/login")
+				c.Abort()
+				return nil
+			}
+
+			return FilterMenusByRole(resultMenu, result[0]["u_auth_type"], isOutRole)
+		} else {
+
 			return nil
 		}
 
-		return FilterMenusByRole(resultMenu, result[0]["u_auth_type"])
 	}
 
 	return nil
 }
 
-// 페이지 출력
-func RenderPage(c *gin.Context, page string, customData gin.H) {
-
-	data := gin.H{
-		"IsLoggedIn": true,
-		"UserName":   "",
-		"ShowFooter": true,
-		"Menus":      []map[string]interface{}{},
-	}
-
-	for k, v := range customData {
-		data[k] = v
-	}
-
-	tmpl, err := template.ParseFiles(
-		"templates/layouts/layout.tmpl",
-		fmt.Sprintf("templates/pages/%s.tmpl", page),
-		"templates/components/navbar.tmpl",
-		"templates/components/sidebar.tmpl",
-		"templates/components/footer.tmpl",
-	)
-	if err != nil {
-		log.Fatalf("[종료] 템플릿 로딩 실패: %v", err)
-	}
-
-	// log.Println("RenderPage ")
-	// log.Println(data)
-
-	c.Status(http.StatusOK)
-	tmpl.ExecuteTemplate(c.Writer, "layout", data)
-}
-
-func FilterMenusByRole(data []map[string]string, userRole string) []map[string]interface{} {
+// 메뉴 정리
+func FilterMenusByRole(data []map[string]string, userRole string, isOutRole bool) []map[string]interface{} {
 	groupMap := map[string]map[string]interface{}{}
 	orderMap := map[string]bool{}
 	orderList := []string{}
@@ -142,11 +150,24 @@ func FilterMenusByRole(data []map[string]string, userRole string) []map[string]i
 
 		groupID := row["group_id"]
 		itemOrder := row["item_order"]
-		item := map[string]string{
-			"ID":    row["item_id"],
-			"Label": row["item_label"],
-			"Href":  row["item_href"],
-			"Order": itemOrder,
+
+		var item map[string]string
+
+		if !util.EmptyBool(isOutRole) {
+			item = map[string]string{
+				"ID":    row["item_id"],
+				"Label": row["item_label"],
+				"Href":  row["item_href"],
+				"Role":  row["item_roles"],
+				"Order": itemOrder,
+			}
+		} else {
+			item = map[string]string{
+				"ID":    row["item_id"],
+				"Label": row["item_label"],
+				"Href":  row["item_href"],
+				"Order": itemOrder,
+			}
 		}
 
 		key := groupID
@@ -156,13 +177,15 @@ func FilterMenusByRole(data []map[string]string, userRole string) []map[string]i
 
 		if _, exists := groupMap[key]; !exists {
 			groupMap[key] = map[string]interface{}{
-				"ID":    key,
-				"Label": row["group_label"],
-				"Order": row["group_order"],
-				"Items": []map[string]string{},
+				"ID":      key,
+				"Label":   row["group_label"],
+				"Order":   row["group_order"],
+				"IsGroup": "Y",
+				"Items":   []map[string]string{},
 			}
 			if util.EmptyString(groupID) {
 				groupMap[key]["Label"] = ""
+				groupMap[key]["IsGroup"] = "N"
 				groupMap[key]["Order"] = itemOrder
 			}
 		}

@@ -5,7 +5,7 @@
   <nav class="px-4" id="sidebar-app" v-cloak>
     <ul class="space-y-2 text-sm">
 			{{range .Menus}}
-				{{if and (ne .Label "") (ne .Label "없음")}}
+				{{if and (ne .Label "") }}
 					<li>
 						<button @click="toggleMenu('{{.ID}}')" class="flex items-center justify-between w-full px-3 py-2 rounded hover:bg-blue-50 font-semibold text-base text-gray-700">
 							<span>{{.Label}} </span>

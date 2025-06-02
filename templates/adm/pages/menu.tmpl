@@ -1,0 +1,145 @@
+<!-- 메뉴 관리 페이지 템플릿 -->
+{{define "title"}}메뉴{{end}}
+
+{{define "content"}}
+<div class="container mx-auto p-4">
+  <h1 class="text-2xl font-bold mb-4">메뉴 그룹 관리</h1>
+
+  <div id="menu-group-app" class="mb-8">
+    <form @submit.prevent="addGroup" class="flex gap-2 mb-4">
+      <input v-model="newGroup.Label" type="text" placeholder="그룹명" class="border p-2 rounded w-64">
+      <input v-model.number="newGroup.Order" type="number" placeholder="순서" class="border p-2 rounded w-32">
+      <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded">추가</button>
+    </form>
+
+    <div class="border rounded p-3 mb-6">
+      <h2 class="text-lg font-bold mb-2">그룹 없는 메뉴 추가</h2>
+      <form @submit.prevent="addItem(null)" class="flex gap-2 mb-2">
+        <input v-model="newItem.Label" type="text" placeholder="메뉴명" class="border p-1 rounded w-48">
+        <input v-model="newItem.Href" type="text" placeholder="주소" class="border p-1 rounded w-64">
+        <input v-model="newItem.Role" type="text" placeholder='권한 (예: ["A", "M"])' class="border p-1 rounded w-48">
+        <input v-model.number="newItem.Order" type="number" placeholder="순서" class="border p-1 rounded w-16">
+        <button type="submit" class="bg-green-600 text-white px-3 rounded">추가</button>
+      </form>
+    </div>
+
+    <ul>
+      <li v-for="group in groups" :key="group.ID" class="border rounded p-3 mb-2">
+        <div class="flex justify-between items-center" v-if="group.IsGroup === 'Y'">
+          <div>
+            <input v-model="group.Label" placeholder="그룹명" class="border p-1 rounded mr-2" >
+            <input v-model.number="group.Order" placeholder="순서" class="border p-1 rounded w-16">
+          </div>
+          <div>
+            <button @click="updateGroup(group)" class="text-blue-500 mr-2">저장</button>
+            <button @click="deleteGroup(group.ID)" class="text-red-500">삭제</button>
+          </div>
+        </div>
+
+        <div class="ml-4 mt-3">
+          <form @submit.prevent="addItem(group.ID)" class="flex gap-2 mb-2"  v-if="group.IsGroup === 'Y'">
+            <input v-model="newItem.Label" type="text" placeholder="메뉴명" class="border p-1 rounded w-48">
+            <input v-model="newItem.Href" type="text" placeholder="주소" class="border p-1 rounded w-64">
+            <input v-model="newItem.Role" type="text" placeholder='권한 (예: ["A", "M"])' class="border p-1 rounded w-48">
+            <input v-model.number="newItem.Order" type="number" placeholder="순서" class="border p-1 rounded w-16">
+            <button type="submit" class="bg-green-600 text-white px-3 rounded">추가</button>
+          </form>
+
+          <ul>
+            <li v-for="item in group.Items" :key="item.ID" class="flex gap-2 items-center mb-1">
+              <input v-model="item.Label" class="border p-1 rounded w-48">
+              <input v-model="item.Href" class="border p-1 rounded w-64">
+              <input v-model="item.Role" class="border p-1 rounded w-48">
+              <input v-model.number="item.Order" class="border p-1 rounded w-16">
+              <button @click="updateItem(item)" class="text-blue-500">저장</button>
+              <button @click="deleteItem(item.ID)" class="text-red-500">삭제</button>
+            </li>
+          </ul>
+        </div>
+      </li>
+    </ul>
+
+  </div>
+</div>
+
+<script>
+const { createApp, reactive } = Vue;
+
+createApp({
+  setup() {
+    const groups = reactive([]);
+    const newGroup = reactive({ Label: '', Order: 0 });
+    const newItem = reactive({ Label: '', Href: '', Role: '', Order: 0 });
+
+    const fetchGroups = async () => {
+      const res = await fetch('/adm/api/menus');
+      const data = await res.json();
+
+      console.log("fetchGroups : ", data)
+
+      groups.splice(0, groups.length, ...data.data);
+    };
+
+    const addGroup = async () => {
+      await fetch('/adm/api/menus/group', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newGroup)
+      });
+      newGroup.Label = ''; newGroup.Order = 0;
+      fetchGroups();
+    };
+
+    const updateGroup = async (group) => {
+      await fetch(`/adm/api/menus/group/${group.ID}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(group)
+      });
+    };
+
+    const deleteGroup = async (id) => {
+      await fetch(`/adm/api/menus/group/${id}`, { method: 'DELETE' });
+      fetchGroups();
+    };
+
+    const addItem = async (groupId) => {
+      await fetch(`/adm/api/menus/item`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...newItem, group_id: groupId })
+      });
+      newItem.Label = ''; newItem.Href = ''; newItem.Role = ''; newItem.Order = 0;
+      fetchGroups();
+    };
+
+    const updateItem = async (item) => {
+      await fetch(`/adm/api/menus/item/${item.ID}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(item)
+      });
+    };
+
+    const deleteItem = async (id) => {
+      await fetch(`/adm/api/menus/item/${id}`, { method: 'DELETE' });
+      fetchGroups();
+    };
+
+    fetchGroups();
+
+    return {
+      groups,
+      newGroup,
+      newItem,
+      addGroup,
+      updateGroup,
+      deleteGroup,
+      addItem,
+      updateItem,
+      deleteItem
+    };
+  }
+}).mount("#menu-group-app")
+</script>
+{{end}}

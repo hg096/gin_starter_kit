@@ -24,6 +24,8 @@ func SetupAdminApiRoutes(rg *gin.RouterGroup) {
 
 		adminApiGroup.POST("/logIn", func(c *gin.Context) { apiUserLogIn(c) })
 
+		adminApiGroup.GET("/menus", func(c *gin.Context) { apiAdmMenus(c) })
+
 	}
 }
 
@@ -111,4 +113,12 @@ func apiUserLogIn(c *gin.Context) {
 
 	// c.Redirect(http.StatusFound, "/adm")
 	util.EndResponse(c, http.StatusOK, gin.H{}, "rest /user/login")
+}
+
+// 메뉴 리스트
+func apiAdmMenus(c *gin.Context) {
+
+	menuData := pageUtil.RenderPageCheckLogin(c, true, true, true)
+
+	util.EndResponse(c, http.StatusOK, gin.H{"data": menuData}, "rest /user/login")
 }
