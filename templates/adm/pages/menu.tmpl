@@ -6,20 +6,21 @@
   <h1 class="text-2xl font-bold mb-4">메뉴 그룹 관리</h1>
 
   <div id="menu-group-app" class="mb-8">
-    <form @submit.prevent="addGroup" class="flex gap-2 mb-4">
-      <input v-model="newGroup.Label" type="text" placeholder="그룹명" class="border p-2 rounded w-64">
-      <input v-model.number="newGroup.Order" type="number" placeholder="순서" class="border p-2 rounded w-32">
-      <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded">추가</button>
-    </form>
-
     <div class="border rounded p-3 mb-6">
-      <h2 class="text-lg font-bold mb-2">그룹 없는 메뉴 추가</h2>
-      <form @submit.prevent="addItem(null)" class="flex gap-2 mb-2">
-        <input v-model="newItem.Label" type="text" placeholder="메뉴명" class="border p-1 rounded w-48">
-        <input v-model="newItem.Href" type="text" placeholder="주소" class="border p-1 rounded w-64">
-        <input v-model="newItem.Role" type="text" placeholder='권한 (예: ["A", "M"])' class="border p-1 rounded w-48">
-        <input v-model.number="newItem.Order" type="number" placeholder="순서" class="border p-1 rounded w-16">
-        <button type="submit" class="bg-green-600 text-white px-3 rounded">추가</button>
+      <h2 class="text-lg font-bold mb-2">메뉴 추가</h2>
+      <form @submit.prevent="addItem(null)" class="border rounded p-3 mb-2">
+
+        <div class="flex items-center">
+          <input v-model="newGroup.LabelG" type="text" placeholder="그룹명" class="border p-2 rounded w-64 mx-1">
+          <input v-model.number="newGroup.OrderG" type="number" placeholder="순서" class="border p-2 rounded w-32 mx-1">
+        </div>
+        <div class="ml-4 mt-3">
+          <input v-model="newItem.Label" type="text" placeholder="메뉴명" class="border p-1 rounded w-48 mx-1">
+          <input v-model="newItem.Href" type="text" placeholder="주소" class="border p-1 rounded w-64 mx-1">
+          <input v-model="newItem.Role" type="text" placeholder='권한 (예: ["A", "M"])' class="border p-1 rounded w-48 mx-1">
+          <input v-model.number="newItem.Order" type="number" placeholder="순서" class="border p-1 rounded w-16 mx-1">
+          <button type="submit" class="bg-green-600 text-white px-3 rounded mx-1">추가</button>
+        </div>
       </form>
     </div>
 
@@ -68,26 +69,13 @@ const { createApp, reactive } = Vue;
 createApp({
   setup() {
     const groups = reactive([]);
-    const newGroup = reactive({ Label: '', Order: 0 });
+    const newGroup = reactive({ LabelG: '', OrderG: 0 });
     const newItem = reactive({ Label: '', Href: '', Role: '', Order: 0 });
 
     const fetchGroups = async () => {
       const res = await fetch('/adm/api/menus');
       const data = await res.json();
-
-      console.log("fetchGroups : ", data)
-
       groups.splice(0, groups.length, ...data.data);
-    };
-
-    const addGroup = async () => {
-      await fetch('/adm/api/menus/group', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newGroup)
-      });
-      newGroup.Label = ''; newGroup.Order = 0;
-      fetchGroups();
     };
 
     const updateGroup = async (group) => {
@@ -107,9 +95,10 @@ createApp({
       await fetch(`/adm/api/menus/item`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...newItem, group_id: groupId })
+        body: JSON.stringify({ ...newItem, ...newGroup, group_id: groupId })
       });
       newItem.Label = ''; newItem.Href = ''; newItem.Role = ''; newItem.Order = 0;
+      newGroup.LabelG = ''; newGroup.OrderG = 0;
       fetchGroups();
     };
 
@@ -132,7 +121,6 @@ createApp({
       groups,
       newGroup,
       newItem,
-      addGroup,
       updateGroup,
       deleteGroup,
       addItem,

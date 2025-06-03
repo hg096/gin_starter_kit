@@ -217,10 +217,10 @@ func BuildSelectQuery(c *gin.Context, tx *sql.Tx,
 
 // insert 문
 func BuildInsertQuery(c *gin.Context, tx *sql.Tx,
-	tableName string, data map[string]string, errWhere string) (int64, error) {
+	tableName string, data map[string]string, errWhere string) (string, error) {
 
 	if db.Conn == nil {
-		return 0, fmt.Errorf("database connection is not set")
+		return "0", fmt.Errorf("database connection is not set")
 	}
 	columns := []string{}
 	placeholders := []string{}
@@ -241,16 +241,16 @@ func BuildInsertQuery(c *gin.Context, tx *sql.Tx,
 	if err != nil {
 		fullQuery := SubstituteQuery(query, args)
 		HandleSqlError(c, tx, fullQuery, 0, errWhere, err)
-		return 0, err
+		return "0", err
 	}
 
 	insertedID, err := result.LastInsertId()
 	if err != nil {
 		fullQuery := SubstituteQuery(query, args)
 		HandleSqlError(c, tx, fullQuery, 0, errWhere, err)
-		return 0, err
+		return "0", err
 	}
-	return insertedID, nil
+	return strconv.FormatInt(insertedID, 10), nil
 }
 
 // update 문

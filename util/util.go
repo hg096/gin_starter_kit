@@ -1,6 +1,8 @@
 package util
 
 import (
+	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -107,9 +109,11 @@ func PostBindField(c *gin.Context, key string, defaultValue string) string {
 	// JSON 바디 캐시에서 조회
 	for _, ct := range []string{c.GetHeader("Content-Type"), c.GetHeader("Accept")} {
 		if strings.Contains(ct, "application/json") {
-			if v, ok := cacheJSONBody(c)[key]; ok {
-				if s, ok := v.(string); ok && s != "" {
-					return s
+			if raw := cacheJSONBody(c)[key]; raw != nil {
+				// raw는 interface{} 형태 (string, float64, bool 등)
+				str := fmt.Sprint(raw)
+				if str != "" {
+					return str
 				}
 			}
 			break
@@ -118,11 +122,6 @@ func PostBindField(c *gin.Context, key string, defaultValue string) string {
 
 	// Form 데이터
 	if v := c.PostForm(key); v != "" {
-		return v
-	}
-
-	// URL 쿼리
-	if v := c.Query(key); v != "" {
 		return v
 	}
 
@@ -143,6 +142,10 @@ func GetBindField(c *gin.Context, key, defaultValue string) string {
 	if v := c.Query(key); v != "" {
 		return v
 	}
+
+	if v := c.Param(key); v != "" {
+		return v
+	}
 	return defaultValue
 }
 
@@ -154,4 +157,57 @@ func GetFields(c *gin.Context, defaults map[string][2]string) map[string]string 
 		out[outKey] = GetBindField(c, queryKey, defaultValue)
 	}
 	return out
+}
+
+// 숫자 -> 문자
+func NumericToString[T Numeric](n T) string {
+	// 내부적으로 타입에 따라 Format 함수 분기
+	switch any(n).(type) {
+	case float32:
+		return strconv.FormatFloat(float64(any(n).(float32)), 'f', -1, 32)
+	case float64:
+		return strconv.FormatFloat(any(n).(float64), 'f', -1, 64)
+	case int, int8, int16, int32, int64:
+		return strconv.FormatInt(any(n).(int64), 10)
+	case uint, uint8, uint16, uint32, uint64, uintptr:
+		return strconv.FormatUint(any(n).(uint64), 10)
+	default:
+		return fmt.Sprint(n)
+	}
+}
+
+// 문자 -> 숫자
+func StringToNumeric[T Numeric](s string) (T, error) {
+	var zero T
+
+	// “제로값”을 one-shot으로 타입 단언할 때 쓰기 위해 any(zero)를 사용
+	switch any(zero).(type) {
+	// 정수 타입: ParseInt → int64 로 파싱한 뒤 T로 변환
+	case int, int8, int16, int32, int64:
+		// 64비트 정수 범위로 파싱 (비트 너비는 64)
+		i, err := strconv.ParseInt(s, 10, 64)
+		if err != nil {
+			return zero, err
+		}
+		return T(i), nil
+
+	// 부호 없는 정수 타입: ParseUint → uint64 로 파싱한 뒤 T로 변환
+	case uint, uint8, uint16, uint32, uint64, uintptr:
+		u, err := strconv.ParseUint(s, 10, 64)
+		if err != nil {
+			return zero, err
+		}
+		return T(u), nil
+
+	// 실수 타입: ParseFloat (64비트 부동소수) → T로 변환
+	case float32, float64:
+		f, err := strconv.ParseFloat(s, 64)
+		if err != nil {
+			return zero, err
+		}
+		return T(f), nil
+
+	default:
+		return zero, fmt.Errorf("unsupported numeric type: %T", zero)
+	}
 }

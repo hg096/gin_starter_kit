@@ -53,11 +53,11 @@ func NewMenuItem() *MenuItem {
 }
 
 func (u *MenuGroup) AddMenuGroup(c *gin.Context, tx *sql.Tx,
-	data map[string]string, errWhere string) (int64, error, error) {
+	data map[string]string, errWhere string) (string, error, error) {
 
 	insertedID, err := core.BuildInsertQuery(c, tx, u.TableName, data, errWhere)
 	if err != nil {
-		return 0, nil, err
+		return "0", nil, err
 	}
 	return insertedID, nil, nil
 }
@@ -84,11 +84,11 @@ func (u *MenuGroup) DeleteMenuGroup(c *gin.Context, tx *sql.Tx,
 }
 
 func (u *MenuItem) AddMenuItem(c *gin.Context, tx *sql.Tx,
-	data map[string]string, errWhere string) (int64, error, error) {
+	data map[string]string, errWhere string) (string, error, error) {
 
 	insertedID, err := core.BuildInsertQuery(c, tx, u.TableName, data, errWhere)
 	if err != nil {
-		return 0, nil, err
+		return "0", nil, err
 	}
 	return insertedID, nil, nil
 }

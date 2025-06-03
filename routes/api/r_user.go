@@ -82,11 +82,11 @@ func apiUserMake(c *gin.Context) {
 	}
 
 	// 트랜젝션 예시 불필요할시 제거
-	if cerr := core.EndTransactionCommit(tx); cerr != nil {
+	if err := core.EndTransactionCommit(tx); err != nil {
 		return
 	}
 
-	fmt.Printf("User가 성공적으로 추가 되었습니다. Inserted ID: %d\n", insertedID)
+	fmt.Printf("User가 성공적으로 추가 되었습니다. Inserted ID: %s\n", insertedID)
 
 	util.EndResponse(c, http.StatusOK, gin.H{"message": "User make"}, "rest /user/make")
 }

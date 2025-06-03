@@ -50,6 +50,7 @@ COLLATE='utf8mb4_general_ci'
 ENGINE=InnoDB
 ;
 
+
 INSERT INTO `_menu_groups` (`mg_idx`, `mg_label`, `mg_order`) VALUES
 	(1, '기본 메뉴', 1),
 	(2, '게시물 관리', 2),
@@ -64,5 +65,4 @@ INSERT INTO `_menu_items` (`mi_idx`, `mi_group_id`, `mi_label`, `mi_href`, `mi_r
 	(5, 3, '광고 승인', '/adm/ads/approval', '["A", "M"]', 2),
 	(6, 4, '설정', '/adm/settings', '["A"]', 1),
 	(7, 0, '로그아웃', '/adm/manage/logout', '["A", "M", "AG"]', 6);
-
 

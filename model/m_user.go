@@ -58,7 +58,7 @@ func NewUpUser() *UserUpdate {
 }
 
 func (u *UserInsert) Insert(c *gin.Context, tx *sql.Tx,
-	data map[string]string, errWhere string) (int64, error, error) {
+	data map[string]string, errWhere string) (string, error, error) {
 
 	// 유효성검사 시작
 	fieldMap := map[string]*string{
@@ -71,7 +71,7 @@ func (u *UserInsert) Insert(c *gin.Context, tx *sql.Tx,
 
 	err := core.ValidateModel(u)
 	if core.HandleValidationError(c, tx, err, u.ValidateConverts) {
-		return 0, err, nil
+		return "0", err, nil
 	}
 	// 유효성 검사 종료
 
@@ -79,13 +79,13 @@ func (u *UserInsert) Insert(c *gin.Context, tx *sql.Tx,
 	hashedPass, err := bcrypt.GenerateFromPassword([]byte(pass), bcrypt.DefaultCost)
 	if err != nil {
 		util.EndResponse(c, http.StatusBadRequest, gin.H{"errCode": 0}, "fn user/Insert")
-		return 0, err, nil
+		return "0", err, nil
 	}
 	data["u_pass"] = string(hashedPass)
 
 	insertedID, err := core.BuildInsertQuery(c, tx, u.TableName, data, errWhere)
 	if err != nil {
-		return 0, nil, err
+		return "0", nil, err
 	}
 	// log.Printf("User Insert 성공. Inserted ID: %d", insertedID)
 

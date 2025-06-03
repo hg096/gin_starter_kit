@@ -268,7 +268,7 @@ func RefreshHandler(c *gin.Context, postData map[string]string) (accessToken str
 }
 
 // 미들웨어 엑세스 토큰 검증 - 사용자 타입, 레벨
-func JWTAuthMiddleware(userType string, lv int) gin.HandlerFunc {
+func JWTAuthMiddleware(userType string, lv int8) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		h := c.GetHeader("Authorization")
 		parts := strings.SplitN(h, " ", 2)
@@ -301,7 +301,7 @@ func JWTAuthMiddleware(userType string, lv int) gin.HandlerFunc {
 
 		// 등급 레벨 조건이 맞는지 확인
 		if lv > 0 {
-			u_auth_level, _ := strconv.Atoi(result[0]["u_auth_level"])
+			u_auth_level, _ := util.StringToNumeric[int8](result[0]["u_auth_level"])
 			if lv > u_auth_level {
 				util.EndResponse(c, http.StatusBadRequest, gin.H{}, "fn auth/JWTAuthMiddleware-level")
 				return

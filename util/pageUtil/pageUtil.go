@@ -8,6 +8,7 @@ import (
 	"gin_starter/util/auth"
 	"log"
 	"net/http"
+	"strings"
 	"text/template"
 
 	"github.com/gin-gonic/gin"
@@ -57,100 +58,140 @@ func RenderPage(c *gin.Context, page string, customData gin.H) {
 	tmpl.ExecuteTemplate(c.Writer, "layout", data)
 }
 
-// 로그인 체크, 토큰 체크, 만료시 쿠키갱신, 메뉴리턴
-func RenderPageCheckLogin(c *gin.Context, isCheckLogin bool, isMakeMenu bool, isOutRole bool) []map[string]interface{} {
-	if !util.EmptyBool(isCheckLogin) {
+// 로그인 체크, 토큰 체크, 만료시 쿠키갱신, 유저 접근 권한 체크
+func RenderPageCheckLogin(c *gin.Context, userType string, lv int8) []map[string]interface{} {
 
-		token, _ := c.Cookie("acc_token")
-		// if err != nil || token == "" {
-		// 	c.Redirect(http.StatusFound, "/adm/manage/login")
-		// 	c.Abort()
-		// 	return nil
-		// }
+	token, _ := c.Cookie("acc_token")
+	// if err != nil || token == "" {
+	// 	c.Redirect(http.StatusFound, "/adm/manage/login")
+	// 	c.Abort()
+	// 	return nil
+	// }
 
-		refToken, err := c.Cookie("ref_token")
-		if err != nil || refToken == "" {
+	refToken, err := c.Cookie("ref_token")
+	if err != nil || refToken == "" {
+		c.Redirect(http.StatusFound, "/adm/manage/login")
+		c.Abort()
+		return nil
+	}
+
+	claims, err := auth.ValidateToken(token, auth.AccessSecret, auth.TokenSecret)
+	if err != nil {
+		newAT, newRT, errMsg := auth.RefreshHandler(c, map[string]string{"refresh_token": refToken})
+		if !util.EmptyString(errMsg) {
+			util.EndResponse(c, http.StatusBadRequest, gin.H{}, errMsg)
+			return nil
+		}
+		claims, _ = auth.ValidateToken(newAT, auth.AccessSecret, auth.TokenSecret)
+		SetCookie(c, "acc_token", newAT, 60*15)
+		SetCookie(c, "ref_token", newRT, 60*60*24*7)
+	}
+
+	result, err := core.BuildSelectQuery(c, nil, "select u_auth_type, u_auth_level from _user where u_id = ? AND u_auth_type != 'U' ", []string{claims.JWTUserID}, "JWTAuthMiddleware.err")
+	if err != nil {
+		c.Redirect(http.StatusFound, "/adm/manage/login")
+		c.Abort()
+		return nil
+	}
+
+	// 사용자 타입 찾기
+	if !util.EmptyString(userType) && result[0]["u_auth_type"] != userType {
+		// 만약에 타입이 두가지 이상 들어가야할때
+		index := strings.Index(userType, result[0]["u_auth_type"])
+		if index < 0 {
 			c.Redirect(http.StatusFound, "/adm/manage/login")
 			c.Abort()
 			return nil
 		}
+		return nil
+	}
 
-		claims, err := auth.ValidateToken(token, auth.AccessSecret, auth.TokenSecret)
-		if err != nil {
-			newAT, newRT, errMsg := auth.RefreshHandler(c, map[string]string{"refresh_token": refToken})
-			if !util.EmptyString(errMsg) {
-				util.EndResponse(c, http.StatusBadRequest, gin.H{}, errMsg)
-				return nil
-			}
-			claims, _ = auth.ValidateToken(newAT, auth.AccessSecret, auth.TokenSecret)
-
-			// data["NEW_AT"] = newAT
-			// data["NEW_RT"] = newRT
-
-			SetCookie(c, "acc_token", newAT, 60*15)
-			SetCookie(c, "ref_token", newRT, 60*60*24*7)
-		}
-
-		result, err := core.BuildSelectQuery(c, nil, "select u_auth_type, u_auth_level from _user where u_id = ? AND u_auth_type != 'U' ", []string{claims.JWTUserID}, "JWTAuthMiddleware.err")
-		if err != nil {
+	// 등급 레벨 조건이 맞는지 확인
+	if lv > 0 {
+		u_auth_level, _ := util.StringToNumeric[int8](result[0]["u_auth_level"])
+		if lv > u_auth_level {
 			c.Redirect(http.StatusFound, "/adm/manage/login")
 			c.Abort()
 			return nil
 		}
+	}
+	c.Set("user_id", claims.JWTUserID)
+	c.Set("user_type", result[0]["u_auth_type"])
+	c.Set("user_level", result[0]["u_auth_level"])
 
-		c.Set("user_id", claims.JWTUserID)
-		c.Set("user_type", result[0]["u_auth_type"])
-		c.Set("user_level", result[0]["u_auth_level"])
+	return nil
+}
 
-		if !util.EmptyBool(isMakeMenu) {
+// 메뉴 생성
+func MakeMenuRole(c *gin.Context, userRole string, isOutRole bool) []map[string]interface{} {
+	groupMap := map[string]map[string]interface{}{}
+	orderMap := map[string]bool{}
+	orderList := []string{}
 
-			resultMenu, err := core.BuildSelectQuery(c, nil, `
+	// dataMg, err := core.BuildSelectQuery(c, nil, `
+	// 		SELECT
+	// 			mg.mg_idx AS group_id,
+	// 			mg.mg_label AS group_label,
+	// 			mg.mg_order AS group_order
+	// 		FROM _menu_groups mg
+	// 		ORDER BY mg.mg_order `, []string{}, "get Menu sql err")
+	// if err != nil {
+	// 	c.Redirect(http.StatusFound, "/adm/manage/login")
+	// 	c.Abort()
+	// 	return nil
+	// }
+
+	dataMi, err := core.BuildSelectQuery(c, nil, `
 			SELECT
 				mg.mg_idx AS group_id,
 				mg.mg_label AS group_label,
 				mg.mg_order AS group_order,
-
- 				mi.mi_group_id AS item_group,
+				mi.mi_group_id AS item_group,
 				mi.mi_idx AS item_id,
 				mi.mi_label AS item_label,
 				mi.mi_href AS item_href,
 				mi.mi_roles AS item_roles,
 				mi.mi_order AS item_order
 			FROM _menu_items mi
-			LEFT JOIN _menu_groups mg ON mg.mg_idx = mi.mi_group_id
-			ORDER BY IFNULL(mg.mg_order, mi.mi_order), mi.mi_order`, []string{}, "get Menu sql err")
-			if err != nil {
-				c.Redirect(http.StatusFound, "/adm/manage/login")
-				c.Abort()
-				return nil
-			}
-
-			return FilterMenusByRole(resultMenu, result[0]["u_auth_type"], isOutRole)
-		} else {
-
-			return nil
-		}
-
+			left join _menu_groups mg on mi.mi_group_id = mg.mg_idx
+			ORDER BY mg.mg_order, mi.mi_order`, []string{}, "get Menu sql err")
+	if err != nil {
+		c.Redirect(http.StatusFound, "/adm/manage/login")
+		c.Abort()
+		return nil
 	}
 
-	return nil
-}
+	// for _, row := range dataMg {
+	// 	key := row["group_id"]
+	// 	if _, exists := groupMap[key]; !exists {
+	// 		groupMap[key] = map[string]interface{}{
+	// 			"ID":      key,
+	// 			"Label":   row["group_label"],
+	// 			"Order":   row["group_order"],
+	// 			"IsGroup": "Y",
+	// 			"Items":   []map[string]string{},
+	// 		}
+	// 	}
+	// }
 
-// 메뉴 정리
-func FilterMenusByRole(data []map[string]string, userRole string, isOutRole bool) []map[string]interface{} {
-	groupMap := map[string]map[string]interface{}{}
-	orderMap := map[string]bool{}
-	orderList := []string{}
-
-	for _, row := range data {
+	for _, row := range dataMi {
 		roles := []string{}
 		if err := json.Unmarshal([]byte(row["item_roles"]), &roles); err != nil || !contains(roles, userRole) {
 			continue
 		}
 
-		groupID := row["group_id"]
-		itemOrder := row["item_order"]
+		keyGroup := row["group_id"]
+		if _, exists := groupMap[keyGroup]; !exists {
+			groupMap[keyGroup] = map[string]interface{}{
+				"ID":      keyGroup,
+				"Label":   row["group_label"],
+				"Order":   row["group_order"],
+				"IsGroup": "Y",
+				"Items":   []map[string]string{},
+			}
+		}
 
+		key := row["item_group"]
 		var item map[string]string
 
 		if !util.EmptyBool(isOutRole) {
@@ -158,35 +199,15 @@ func FilterMenusByRole(data []map[string]string, userRole string, isOutRole bool
 				"ID":    row["item_id"],
 				"Label": row["item_label"],
 				"Href":  row["item_href"],
+				"Order": row["item_order"],
 				"Role":  row["item_roles"],
-				"Order": itemOrder,
 			}
 		} else {
 			item = map[string]string{
 				"ID":    row["item_id"],
 				"Label": row["item_label"],
 				"Href":  row["item_href"],
-				"Order": itemOrder,
-			}
-		}
-
-		key := groupID
-		if util.EmptyString(groupID) {
-			key = itemOrder // 그룹이 없을 경우 itemOrder 기준 그룹화
-		}
-
-		if _, exists := groupMap[key]; !exists {
-			groupMap[key] = map[string]interface{}{
-				"ID":      key,
-				"Label":   row["group_label"],
-				"Order":   row["group_order"],
-				"IsGroup": "Y",
-				"Items":   []map[string]string{},
-			}
-			if util.EmptyString(groupID) {
-				groupMap[key]["Label"] = ""
-				groupMap[key]["IsGroup"] = "N"
-				groupMap[key]["Order"] = itemOrder
+				"Order": row["item_order"],
 			}
 		}
 
