@@ -38,17 +38,19 @@ ENGINE=InnoDB
 ;
 
 CREATE TABLE `_menu_items` (
-	`mi_idx` INT NOT NULL AUTO_INCREMENT,
-	`mi_group_id` INT NULL DEFAULT NULL,
+	`mi_idx` INT(10) NOT NULL AUTO_INCREMENT,
+	`mi_group_id` INT(10) NULL DEFAULT NULL,
 	`mi_label` VARCHAR(100) NULL DEFAULT NULL COLLATE 'utf8mb4_general_ci',
 	`mi_href` VARCHAR(255) NULL DEFAULT NULL COLLATE 'utf8mb4_general_ci',
 	`mi_roles` JSON NULL DEFAULT NULL,
-	`mi_order` INT NOT NULL DEFAULT '0',
-	PRIMARY KEY (`mi_idx`) USING BTREE
+	`mi_order` INT(10) NOT NULL DEFAULT '0',
+	PRIMARY KEY (`mi_idx`) USING BTREE,
+	INDEX `mi_group_id` (`mi_group_id`) USING BTREE
 )
 COLLATE='utf8mb4_general_ci'
 ENGINE=InnoDB
 ;
+
 
 
 INSERT INTO `_menu_groups` (`mg_idx`, `mg_label`, `mg_order`) VALUES
