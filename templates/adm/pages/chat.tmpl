@@ -1,0 +1,91 @@
+{{define "title"}}실시간 채팅{{end}}
+
+{{define "content"}}
+<div id="chat-app" class="flex h-[80vh] border rounded bg-white overflow-hidden">
+    <div class="flex-1 flex flex-col">
+        <div class="p-2 bg-gray-100 flex justify-between items-center">
+            <span v-if="currentUser">{{currentUser.u_name}} ({{currentUser.u_id}})</span>
+            <span v-else class="text-gray-500">대화 상대를 선택하세요</span>
+            <button v-if="currentUser" @click="leaveChat" class="text-sm text-red-500">나가기</button>
+        </div>
+        <div ref="chatBox" class="flex-1 overflow-y-auto p-2 space-y-2 bg-gray-50">
+            <div v-for="m in messages" :key="m.time" :class="m.from===myId ? 'text-right' : 'text-left'">
+                <span class="inline-block px-2 py-1 rounded bg-blue-100" v-text="m.content"></span>
+            </div>
+        </div>
+        <div class="p-2 flex border-t" v-if="currentUser">
+            <input v-model="newMessage" @keyup.enter="sendMessage" class="flex-1 border rounded px-2" placeholder="메시지 입력" />
+            <button @click="sendMessage" class="ml-2 px-3 bg-blue-600 text-white rounded">전송</button>
+        </div>
+    </div>
+    <div class="w-60 border-l overflow-y-auto">
+        <h3 class="p-2 font-semibold border-b">사용자 목록</h3>
+        <div v-for="u in users" :key="u.u_id" @click="selectUser(u)" class="p-2 cursor-pointer hover:bg-gray-100" :class="{'bg-gray-200': currentUser && currentUser.u_id===u.u_id}">
+            {{u.u_name}} ({{u.u_id}})
+        </div>
+    </div>
+</div>
+
+<script>
+const { createApp, ref, onMounted, nextTick } = Vue;
+createApp({
+    setup() {
+        const users = ref([]);
+        const currentUser = ref(null);
+        const messages = ref([]);
+        const newMessage = ref('');
+        const ws = ref(null);
+        const myId = '{{.MyID}}';
+        const chatBox = ref(null);
+
+        const fetchUsers = async () => {
+            const res = await fetch('/adm/api/users');
+            const data = await res.json();
+            users.value = data.data;
+        };
+
+        const connect = () => {
+            if (ws.value) ws.value.close();
+            if (!currentUser.value) return;
+            const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+            ws.value = new WebSocket(`${proto}://${location.host}/ws?user=${myId}&target=${currentUser.value.u_id}`);
+            ws.value.onmessage = (e) => {
+                const msg = JSON.parse(e.data);
+                messages.value.push(msg);
+                nextTick(() => {
+                    if (chatBox.value) chatBox.value.scrollTop = chatBox.value.scrollHeight;
+                });
+            };
+            ws.value.onclose = () => { ws.value = null; };
+            messages.value = [];
+        };
+
+        const selectUser = (u) => {
+            currentUser.value = u;
+            connect();
+        };
+
+        const sendMessage = () => {
+            if (!newMessage.value || !ws.value) return;
+            const msg = {from: myId, to: currentUser.value.u_id, content: newMessage.value, time: Date.now()};
+            ws.value.send(JSON.stringify(msg));
+            messages.value.push(msg);
+            newMessage.value = '';
+            nextTick(() => {
+                if (chatBox.value) chatBox.value.scrollTop = chatBox.value.scrollHeight;
+            });
+        };
+
+        const leaveChat = () => {
+            if (ws.value) ws.value.close();
+            ws.value = null;
+            currentUser.value = null;
+            messages.value = [];
+        };
+
+        onMounted(fetchUsers);
+        return { users, currentUser, messages, newMessage, selectUser, sendMessage, leaveChat, chatBox, myId };
+    }
+}).mount('#chat-app');
+</script>
+{{end}}
