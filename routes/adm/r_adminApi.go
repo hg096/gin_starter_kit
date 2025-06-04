@@ -284,7 +284,7 @@ func apiAdmMenusItemDel(c *gin.Context) {
 // 사용자 목록
 func apiAdmUserList(c *gin.Context) {
 
-	pageUtil.RenderPageCheckLogin(c, "A", 0)
+	pageUtil.RenderPageCheckLogin(c, "A, M, AG", 0)
 
 	users, err := core.BuildSelectQuery(c, nil, `SELECT u_idx, u_id, u_name, u_email, u_auth_type FROM _user ORDER BY u_idx`, []string{}, "apiAdmUserList")
 	if err != nil {
@@ -341,6 +341,7 @@ func apiAdmUserEdit(c *gin.Context) {
 		"user_name":  {"u_name", ""},
 		"user_email": {"u_email", ""},
 		"user_auth":  {"u_auth_type", ""},
+		"user_pass":  {"u_pass", ""},
 	})
 
 	user := model.NewUpUser()

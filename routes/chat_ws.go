@@ -1,7 +1,9 @@
 package routes
 
 import (
+	"log"
 	"net/http"
+	"sort"
 	"sync"
 
 	"github.com/gin-gonic/gin"
@@ -15,8 +17,15 @@ type chatMessage struct {
 	Time    int64  `json:"time"`
 }
 
+func makeRoomID(a, b string) string {
+	pair := []string{a, b}
+	sort.Strings(pair) // 항상 같은 순서
+	return pair[0] + ":" + pair[1]
+}
+
 type chatClient struct {
 	id   string
+	room string
 	conn *websocket.Conn
 	hub  *chatHub
 	send chan chatMessage
@@ -45,12 +54,12 @@ func newChatHub() *chatHub {
 func (h *chatHub) register(c *chatClient) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if h.clients[c.id] == nil {
-		h.clients[c.id] = make(map[*chatClient]bool)
+	if h.clients[c.room] == nil {
+		h.clients[c.room] = make(map[*chatClient]bool)
 	}
-	h.clients[c.id][c] = true
+	h.clients[c.room][c] = true
 	// send history
-	for _, m := range h.history[c.id] {
+	for _, m := range h.history[c.room] {
 		c.send <- m
 	}
 }
@@ -58,22 +67,25 @@ func (h *chatHub) register(c *chatClient) {
 func (h *chatHub) unregister(c *chatClient) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if cl, ok := h.clients[c.id]; ok {
+
+	if cl, ok := h.clients[c.room]; ok {
 		if _, ok := cl[c]; ok {
 			delete(cl, c)
 			close(c.send)
 		}
+		// ✅ 참가자 남아있으면 유지
 		if len(cl) == 0 {
-			delete(h.clients, c.id)
+			delete(h.clients, c.room)
+			delete(h.history, c.room)
 		}
 	}
 }
 
-func (h *chatHub) broadcast(msg chatMessage) {
+func (h *chatHub) broadcast(room string, msg chatMessage) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.history[msg.To] = append(h.history[msg.To], msg)
-	if cl, ok := h.clients[msg.To]; ok {
+	h.history[room] = append(h.history[room], msg)
+	if cl, ok := h.clients[room]; ok {
 		for c := range cl {
 			select {
 			case c.send <- msg:
@@ -85,7 +97,7 @@ func (h *chatHub) broadcast(msg chatMessage) {
 	}
 }
 
-func (c *chatClient) readPump(target string) {
+func (c *chatClient) readPump() {
 	defer func() {
 		c.hub.unregister(c)
 		c.conn.Close()
@@ -95,10 +107,7 @@ func (c *chatClient) readPump(target string) {
 		if err := c.conn.ReadJSON(&msg); err != nil {
 			break
 		}
-		if msg.To == "" {
-			msg.To = target
-		}
-		c.hub.broadcast(msg)
+		c.hub.broadcast(c.room, msg)
 	}
 }
 
@@ -112,14 +121,18 @@ func (c *chatClient) writePump() {
 func ChatWebSocket(c *gin.Context) {
 	userID := c.Query("user")
 	target := c.Query("target")
+	room := makeRoomID(userID, target)
+
+	log.Println("New WebSocket:", userID, "→", target, "Room:", room)
+
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		return
 	}
-	client := &chatClient{id: userID, conn: conn, hub: hub, send: make(chan chatMessage, 8)}
+	client := &chatClient{id: userID, room: room, conn: conn, hub: hub, send: make(chan chatMessage, 8)}
 	hub.register(client)
 	go client.writePump()
-	client.readPump(target)
+	client.readPump()
 }
 
 func SetupChatRoutes(r *gin.Engine) {

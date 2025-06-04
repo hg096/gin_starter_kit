@@ -11,6 +11,7 @@
     <label class="mx-1"><input type="radio" value="A" v-model="newUser.user_auth">관리자</label>
     <label class="mx-1"><input type="radio" value="M" v-model="newUser.user_auth">매니저</label>
     <label class="mx-1"><input type="radio" value="AG" v-model="newUser.user_auth">부매니저</label>
+    <label class="mx-1"><input type="radio" value="U" v-model="newUser.user_auth">사용자</label>
     <button @click="addUser" class="bg-green-600 text-white px-3 rounded mx-1">추가</button>
   </div>
   <table class="min-w-full bg-white text-sm">
@@ -26,10 +27,10 @@
     <tbody>
       <template v-for="u in users" :key="u.u_idx">
         <tr>
-          <td class="border px-4 py-2">{{u.u_id}}</td>
-          <td class="border px-4 py-2">{{u.u_name}}</td>
-          <td class="border px-4 py-2">{{u.u_email}}</td>
-          <td class="border px-4 py-2">{{u.u_auth_type}}</td>
+          <td class="border px-4 py-2" v-text="u.u_id"></td>
+          <td class="border px-4 py-2" v-text="u.u_name"></td>
+          <td class="border px-4 py-2" v-text="u.u_email"></td>
+          <td class="border px-4 py-2" v-text="u.u_auth_type"></td>
           <td class="border px-4 py-2 text-right">
             <button @click="toggleEdit(u)" class="text-blue-500 mr-2">수정</button>
             <button @click="deleteUser(u.u_idx)" class="text-red-500">삭제</button>
@@ -40,9 +41,11 @@
             <div class="flex flex-wrap items-center gap-2 bg-gray-50 p-2">
               <input v-model="u.u_name" placeholder="이름" class="border p-1 rounded">
               <input v-model="u.u_email" placeholder="이메일" class="border p-1 rounded">
+              <input v-model="u.u_pass" placeholder="비밀번호" class="border p-1 rounded">
               <label class="ml-2"><input type="radio" value="A" v-model="u.u_auth_type">관리자</label>
               <label class="ml-2"><input type="radio" value="M" v-model="u.u_auth_type">매니저</label>
               <label class="ml-2"><input type="radio" value="AG" v-model="u.u_auth_type">부매니저</label>
+              <label class="ml-2"><input type="radio" value="U" v-model="u.u_auth_type">사용자</label>
               <button @click="updateUser(u)" class="bg-blue-600 text-white px-3 rounded ml-2">저장</button>
             </div>
           </td>
@@ -87,7 +90,7 @@ createApp({
       await fetch(`/adm/api/users/${u.u_idx}`, {
         method: 'PUT',
         headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({user_name:u.u_name, user_email:u.u_email, user_auth:u.u_auth_type})
+        body: JSON.stringify({user_name:u.u_name, user_email:u.u_email, user_pass:u.u_pass, user_auth:u.u_auth_type})
       });
       u.isOpen = false;
       fetchUsers();

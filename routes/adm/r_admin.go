@@ -13,7 +13,14 @@ func SetupAdminRoutes(rg *gin.RouterGroup) {
 
 	rg.GET("/", func(c *gin.Context) {
 		// 예시: 세션 또는 쿠키 기반 로그인 정보
-		menuData := pageUtil.RenderPageCheckLogin(c, "", 0)
+		pageUtil.RenderPageCheckLogin(c, "", 0)
+
+		userType, _ := util.GetContextVal(c, "user_type")
+		menuData := pageUtil.MakeMenuRole(c, userType, false)
+
+		// fmt.Println("menuData >> ")
+		// fmt.Println(menuData)
+
 		pageUtil.RenderPage(c, "home", gin.H{
 			"Menus":    menuData,
 			"UserName": "홍길동",
@@ -63,7 +70,7 @@ func SetupAdminRoutes(rg *gin.RouterGroup) {
 	{
 
 		adminGroup.GET("/login", func(c *gin.Context) {
-			pageUtil.RenderPageCheckLogin(c, "", 0)
+			// pageUtil.RenderPageCheckLogin(c, "", 0)
 			pageUtil.RenderPage(c, "login", gin.H{"ShowFooter": false})
 		})
 
