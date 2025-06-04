@@ -33,6 +33,18 @@ func SetupAdminRoutes(rg *gin.RouterGroup) {
 		})
 	})
 
+	rg.GET("/users", func(c *gin.Context) {
+		pageUtil.RenderPageCheckLogin(c, "", 0)
+
+		userType, _ := util.GetContextVal(c, "user_type")
+		menuData := pageUtil.MakeMenuRole(c, userType, false)
+
+		pageUtil.RenderPage(c, "user", gin.H{
+			"Menus":    menuData,
+			"UserName": "홍길동",
+		})
+	})
+
 	adminGroup := rg.Group("/manage")
 	{
 
