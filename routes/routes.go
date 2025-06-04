@@ -57,6 +57,8 @@ func SetupRoutes(r *gin.Engine) {
 		out.SetupOutRoutes(outGroup)
 	}
 
+	SetupChatRoutes(r)
+
 	// // 템플릿 에러 핸들링용 fallback route
 	// r.NoRoute(func(c *gin.Context) {
 	// 	pageUtil.RenderPage(c, "error", gin.H{

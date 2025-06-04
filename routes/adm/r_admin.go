@@ -45,6 +45,20 @@ func SetupAdminRoutes(rg *gin.RouterGroup) {
 		})
 	})
 
+	rg.GET("/chat", func(c *gin.Context) {
+		pageUtil.RenderPageCheckLogin(c, "", 0)
+
+		userId, _ := util.GetContextVal(c, "user_id")
+		userType, _ := util.GetContextVal(c, "user_type")
+		menuData := pageUtil.MakeMenuRole(c, userType, false)
+
+		pageUtil.RenderPage(c, "chat", gin.H{
+			"Menus":    menuData,
+			"UserName": "홍길동",
+			"MyID":     userId,
+		})
+	})
+
 	adminGroup := rg.Group("/manage")
 	{
 
