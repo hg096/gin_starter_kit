@@ -121,7 +121,6 @@ func (u *UserUpdate) Update(c *gin.Context, tx *sql.Tx,
 
 	// 변경되면 안되는 데이터 제외
 	delete(data, "u_id")
-	delete(data, "u_auth_type")
 
 	_, err = core.BuildUpdateQuery(c, tx, u.TableName, data, where, whereData, errWhere)
 	if err != nil {

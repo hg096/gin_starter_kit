@@ -39,6 +39,15 @@ func SetupAdminApiRoutes(rg *gin.RouterGroup) {
 		// 메뉴 삭제
 		adminApiGroup.DELETE("/menus/item/:id", func(c *gin.Context) { apiAdmMenusItemDel(c) })
 
+		// 사용자 목록
+		adminApiGroup.GET("/users", func(c *gin.Context) { apiAdmUserList(c) })
+		// 사용자 추가
+		adminApiGroup.POST("/users", func(c *gin.Context) { apiAdmUserAdd(c) })
+		// 사용자 수정
+		adminApiGroup.PUT("/users/:id", func(c *gin.Context) { apiAdmUserEdit(c) })
+		// 사용자 삭제
+		adminApiGroup.DELETE("/users/:id", func(c *gin.Context) { apiAdmUserDel(c) })
+
 	}
 }
 
@@ -270,4 +279,90 @@ func apiAdmMenusItemDel(c *gin.Context) {
 	}
 
 	util.EndResponse(c, http.StatusOK, gin.H{"data": ""}, "rest apiAdmMenusItemDel")
+}
+
+// 사용자 목록
+func apiAdmUserList(c *gin.Context) {
+
+	pageUtil.RenderPageCheckLogin(c, "A", 0)
+
+	users, err := core.BuildSelectQuery(c, nil, `SELECT u_idx, u_id, u_name, u_email, u_auth_type FROM _user ORDER BY u_idx`, []string{}, "apiAdmUserList")
+	if err != nil {
+		util.EndResponse(c, http.StatusBadRequest, gin.H{"data": ""}, "rest apiAdmUserList")
+		return
+	}
+
+	util.EndResponse(c, http.StatusOK, gin.H{"data": users}, "rest apiAdmUserList")
+}
+
+// 사용자 추가
+func apiAdmUserAdd(c *gin.Context) {
+
+	pageUtil.RenderPageCheckLogin(c, "A", 0)
+
+	user := model.NewUser()
+	data := util.PostFields(c, map[string][2]string{
+		"user_id":    {"u_id", ""},
+		"user_pass":  {"u_pass", ""},
+		"user_name":  {"u_name", ""},
+		"user_email": {"u_email", ""},
+		"user_auth":  {"u_auth_type", "AG"},
+	})
+
+	tx, err := core.BeginTransaction(c)
+	if err != nil {
+		util.EndResponse(c, http.StatusBadRequest, gin.H{"data": ""}, "rest apiAdmUserAdd")
+		return
+	}
+
+	_, valErr, sqlErr := user.Insert(c, tx, data, "apiAdmUserAdd")
+	if valErr != nil || sqlErr != nil {
+		log.Printf("User Insert 에러: %v", valErr)
+		return
+	}
+
+	if err := core.EndTransactionCommit(tx); err != nil {
+		util.EndResponse(c, http.StatusBadRequest, gin.H{"data": ""}, "rest apiAdmUserAdd")
+		return
+	}
+
+	util.EndResponse(c, http.StatusOK, gin.H{"data": ""}, "rest apiAdmUserAdd")
+}
+
+// 사용자 수정
+func apiAdmUserEdit(c *gin.Context) {
+
+	pageUtil.RenderPageCheckLogin(c, "A", 0)
+
+	getData := util.GetFields(c, map[string][2]string{
+		"id": {"id", "0"},
+	})
+	postData := util.PostFields(c, map[string][2]string{
+		"user_name":  {"u_name", ""},
+		"user_email": {"u_email", ""},
+		"user_auth":  {"u_auth_type", ""},
+	})
+
+	user := model.NewUpUser()
+	valErr, sqlErr := user.Update(c, nil, postData, "u_idx = ?", []string{getData["id"]}, "apiAdmUserEdit")
+	if valErr != nil || sqlErr != nil {
+		log.Printf("User Update 에러: %v", valErr)
+		return
+	}
+
+	util.EndResponse(c, http.StatusOK, gin.H{"data": ""}, "rest apiAdmUserEdit")
+}
+
+// 사용자 삭제
+func apiAdmUserDel(c *gin.Context) {
+
+	pageUtil.RenderPageCheckLogin(c, "A", 0)
+
+	getData := util.GetFields(c, map[string][2]string{
+		"id": {"id", "0"},
+	})
+
+	core.BuildDeleteQuery(c, nil, "_user", "u_idx = ?", []string{getData["id"]}, "apiAdmUserDel")
+
+	util.EndResponse(c, http.StatusOK, gin.H{"data": ""}, "rest apiAdmUserDel")
 }

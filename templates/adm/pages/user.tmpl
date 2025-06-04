@@ -1,0 +1,106 @@
+{{define "title"}}사용자 관리{{end}}
+
+{{define "content"}}
+<div class="container mx-auto p-4" id="user-app">
+  <h1 class="text-2xl font-bold mb-4">사용자 관리</h1>
+  <div class="mb-4">
+    <input v-model="newUser.user_id" placeholder="아이디" class="border p-1 rounded mx-1">
+    <input v-model="newUser.user_pass" type="password" placeholder="비밀번호" class="border p-1 rounded mx-1">
+    <input v-model="newUser.user_name" placeholder="이름" class="border p-1 rounded mx-1">
+    <input v-model="newUser.user_email" placeholder="이메일" class="border p-1 rounded mx-1">
+    <label class="mx-1"><input type="radio" value="A" v-model="newUser.user_auth">관리자</label>
+    <label class="mx-1"><input type="radio" value="M" v-model="newUser.user_auth">매니저</label>
+    <label class="mx-1"><input type="radio" value="AG" v-model="newUser.user_auth">부매니저</label>
+    <button @click="addUser" class="bg-green-600 text-white px-3 rounded mx-1">추가</button>
+  </div>
+  <table class="min-w-full bg-white text-sm">
+    <thead>
+      <tr>
+        <th class="py-2 px-4">아이디</th>
+        <th class="py-2 px-4">이름</th>
+        <th class="py-2 px-4">이메일</th>
+        <th class="py-2 px-4">권한</th>
+        <th class="py-2 px-4"></th>
+      </tr>
+    </thead>
+    <tbody>
+      <template v-for="u in users" :key="u.u_idx">
+        <tr>
+          <td class="border px-4 py-2">{{u.u_id}}</td>
+          <td class="border px-4 py-2">{{u.u_name}}</td>
+          <td class="border px-4 py-2">{{u.u_email}}</td>
+          <td class="border px-4 py-2">{{u.u_auth_type}}</td>
+          <td class="border px-4 py-2 text-right">
+            <button @click="toggleEdit(u)" class="text-blue-500 mr-2">수정</button>
+            <button @click="deleteUser(u.u_idx)" class="text-red-500">삭제</button>
+          </td>
+        </tr>
+        <tr v-show="u.isOpen">
+          <td colspan="5" class="border-b px-4 py-2">
+            <div class="flex flex-wrap items-center gap-2 bg-gray-50 p-2">
+              <input v-model="u.u_name" placeholder="이름" class="border p-1 rounded">
+              <input v-model="u.u_email" placeholder="이메일" class="border p-1 rounded">
+              <label class="ml-2"><input type="radio" value="A" v-model="u.u_auth_type">관리자</label>
+              <label class="ml-2"><input type="radio" value="M" v-model="u.u_auth_type">매니저</label>
+              <label class="ml-2"><input type="radio" value="AG" v-model="u.u_auth_type">부매니저</label>
+              <button @click="updateUser(u)" class="bg-blue-600 text-white px-3 rounded ml-2">저장</button>
+            </div>
+          </td>
+        </tr>
+      </template>
+    </tbody>
+  </table>
+</div>
+
+<script>
+const { createApp, reactive } = Vue;
+createApp({
+  setup() {
+    const users = reactive([]);
+    const newUser = reactive({user_id:'', user_pass:'', user_name:'', user_email:'', user_auth:'AG'});
+
+    const fetchUsers = async () => {
+      const res = await fetch('/adm/api/users');
+      const data = await res.json();
+      users.splice(0, users.length, ...data.data.map(u => ({...u, isOpen:false})));
+    };
+
+    const addUser = async () => {
+      await fetch('/adm/api/users', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(newUser)
+      });
+      newUser.user_id='';
+      newUser.user_pass='';
+      newUser.user_name='';
+      newUser.user_email='';
+      newUser.user_auth='AG';
+      fetchUsers();
+    };
+
+    const toggleEdit = (u) => {
+      u.isOpen = !u.isOpen;
+    };
+
+    const updateUser = async (u) => {
+      await fetch(`/adm/api/users/${u.u_idx}`, {
+        method: 'PUT',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({user_name:u.u_name, user_email:u.u_email, user_auth:u.u_auth_type})
+      });
+      u.isOpen = false;
+      fetchUsers();
+    };
+
+    const deleteUser = async (id) => {
+      await fetch(`/adm/api/users/${id}`, { method: 'DELETE' });
+      fetchUsers();
+    };
+
+    fetchUsers();
+    return { users, newUser, addUser, updateUser, deleteUser, toggleEdit };
+  }
+}).mount('#user-app');
+</script>
+{{end}}
