@@ -50,6 +50,27 @@
 				// users.value = data.data;
 			};
 
+			// 채팅 내역을 HTTP GET으로 불러와 messages.value에 채워주는 함수
+			const fetchHistory = async (roomID) => {
+				try {
+					const res = await fetch(`/adm/api/chat/history?room=${encodeURIComponent(roomID)}`);
+					if (!res.ok) {
+						throw new Error("HTTP 코드: " + res.status);
+					}
+					const json = await res.json();
+					// json.data는 ChatMessage 배열
+					// 기존 WebSocket 메시지 포맷({from,to,content,time})과 다르므로 적절히 매핑
+					messages.value = json.data.map((m) => ({
+						from: m.sender_id,
+						to: m.receiver_id,
+						content: m.content,
+						time: new Date(m.timestamp).getTime() // Unix 밀리세컨드
+					}));
+				} catch (error) {
+					console.error("fetchHistory 에러:", error);
+					throw error;
+				}
+			};
 			const connect = () => {
 				if (!currentUser.value) return;
 
@@ -100,7 +121,21 @@
 				}
 
 				currentUser.value = u;
-				connect(); // 강제 한 번만 실행
+				// connect(); // 강제 한 번만 실행
+
+				// 새로운 roomID
+				const newRoomID = [myId, currentUser.value.u_id].sort().join(":");
+
+				// DB에서 채팅 내역 불러오기
+				fetchHistory(newRoomID)
+					.then(() => {
+						// 3) WebSocket 연결
+						connect();
+					})
+					.catch((err) => {
+						console.error("채팅 내역 불러오기 실패:", err);
+						connect(); // 내역 못불러와도 소켓 연결은 시도
+					});
 			};
 
 			const sendMessage = () => {
@@ -114,13 +149,42 @@
 				};
 
 				console.log("Sending:", msg);
-				ws.value.send(JSON.stringify(msg));
+				// ws.value.send(JSON.stringify(msg));
 				// messages.value.push(msg);
-				newMessage.value = "";
+				// newMessage.value = "";
 
-				nextTick(() => {
-					if (chatBox.value) chatBox.value.scrollTop = chatBox.value.scrollHeight;
-				});
+				// HTTP POST로 DB에 저장
+				fetch("/adm/api/chat/message", {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({
+						room_id: [myId, currentUser.value.u_id].sort().join(":"),
+						sender_id: myId,
+						receiver_id: currentUser.value.u_id,
+						content: newMessage.value.trim()
+					})
+				})
+					.then((res) => {
+						if (!res.ok) {
+							throw new Error("DB 저장 실패, HTTP 코드: " + res.status);
+						}
+						return res.json();
+					})
+					.then((json) => {
+						// DB 저장 성공 → WebSocket으로 브로드캐스트
+						ws.value.send(JSON.stringify(msg));
+						newMessage.value = "";
+						// (로컬 메시지에도 바로 추가하고 싶으면 주석 해제)
+						// messages.value.push(msg);
+						nextTick(() => {
+							if (chatBox.value) chatBox.value.scrollTop = chatBox.value.scrollHeight;
+						});
+					})
+					.catch((err) => {
+						console.error("메시지 DB 저장 중 에러:", err);
+						// 필요하다면 사용자에게 오류 알림
+						alert("메시지를 서버에 저장하지 못했습니다.");
+					});
 			};
 
 			const leaveChat = () => {
@@ -132,6 +196,7 @@
 			};
 
 			onMounted(fetchUsers);
+
 			return { users, currentUser, messages, newMessage, selectUser, sendMessage, leaveChat, chatBox, myId };
 		}
 	}).mount("#chat-app");

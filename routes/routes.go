@@ -34,6 +34,8 @@ func SetupRoutes(r *gin.Engine) {
 		adm.SetupAdminRoutes(admGroup)
 		// 관리자 api 등록
 		adm.SetupAdminApiRoutes(admGroup)
+		// 채팅
+		adm.SetupAdminChatApiRoutes(admGroup)
 	}
 
 	apiGroup := r.Group("/api")
