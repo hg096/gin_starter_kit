@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"sort"
 	"sync"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -32,51 +33,59 @@ type chatClient struct {
 }
 
 type chatHub struct {
-	mu      sync.Mutex
+	mu      sync.RWMutex
 	clients map[string]map[*chatClient]bool
-	history map[string][]chatMessage
+	// history map[string][]chatMessage
 }
 
 var upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool { return true },
+	ReadBufferSize:  1024,
+	WriteBufferSize: 1024,
+	CheckOrigin:     func(r *http.Request) bool { return true },
 }
 
 var hub = newChatHub()
 
 func newChatHub() *chatHub {
-	h := &chatHub{
+	return &chatHub{
 		clients: make(map[string]map[*chatClient]bool),
-		history: make(map[string][]chatMessage),
+		// history: make(map[string][]chatMessage),
 	}
-	return h
 }
 
 func (h *chatHub) register(c *chatClient) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+
 	if h.clients[c.room] == nil {
 		h.clients[c.room] = make(map[*chatClient]bool)
 	}
 	h.clients[c.room][c] = true
-	// send history
-	for _, m := range h.history[c.room] {
-		c.send <- m
-	}
+
+	// send existing chat history (non-blocking)
+	// go func(msgs []chatMessage) {
+	// 	for _, m := range msgs {
+	// 		select {
+	// 		case c.send <- m:
+	// 		case <-time.After(100 * time.Millisecond):
+	// 			log.Println("[register] Timeout sending history to", c.id)
+	// 		}
+	// 	}
+	// }(h.history[c.room])
 }
 
 func (h *chatHub) unregister(c *chatClient) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	if cl, ok := h.clients[c.room]; ok {
-		if _, ok := cl[c]; ok {
-			delete(cl, c)
+	if clients, ok := h.clients[c.room]; ok {
+		if _, exists := clients[c]; exists {
+			delete(clients, c)
 			close(c.send)
 		}
-		// ✅ 참가자 남아있으면 유지
-		if len(cl) == 0 {
+		if len(clients) == 0 {
 			delete(h.clients, c.room)
-			delete(h.history, c.room)
+			// delete(h.history, c.room)
 		}
 	}
 }
@@ -84,14 +93,16 @@ func (h *chatHub) unregister(c *chatClient) {
 func (h *chatHub) broadcast(room string, msg chatMessage) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.history[room] = append(h.history[room], msg)
-	if cl, ok := h.clients[room]; ok {
-		for c := range cl {
+
+	// h.history[room] = append(h.history[room], msg)
+	if clients, ok := h.clients[room]; ok {
+		for c := range clients {
 			select {
 			case c.send <- msg:
 			default:
+				log.Println("[broadcast] client send buffer full, disconnecting:", c.id)
 				close(c.send)
-				delete(cl, c)
+				delete(clients, c)
 			}
 		}
 	}
@@ -99,12 +110,21 @@ func (h *chatHub) broadcast(room string, msg chatMessage) {
 
 func (c *chatClient) readPump() {
 	defer func() {
+		log.Println("[readPump] closing:", c.id)
 		c.hub.unregister(c)
 		c.conn.Close()
 	}()
+
+	c.conn.SetReadLimit(512)
+	_ = c.conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+	c.conn.SetPongHandler(func(string) error {
+		return c.conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+	})
+
 	for {
 		var msg chatMessage
 		if err := c.conn.ReadJSON(&msg); err != nil {
+			log.Println("[readPump] ReadJSON error:", err)
 			break
 		}
 		c.hub.broadcast(c.room, msg)
@@ -112,24 +132,54 @@ func (c *chatClient) readPump() {
 }
 
 func (c *chatClient) writePump() {
-	for msg := range c.send {
-		c.conn.WriteJSON(msg)
+	ticker := time.NewTicker(50 * time.Second)
+	defer func() {
+		ticker.Stop()
+		c.conn.Close()
+	}()
+
+	for {
+		select {
+		case msg, ok := <-c.send:
+			if !ok {
+				_ = c.conn.WriteMessage(websocket.CloseMessage, []byte{})
+				return
+			}
+			if err := c.conn.WriteJSON(msg); err != nil {
+				log.Println("[writePump] WriteJSON error:", err)
+				return
+			}
+		case <-ticker.C:
+			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+				log.Println("[writePump] Ping error:", err)
+				return
+			}
+		}
 	}
 }
 
-// ChatWebSocket handles /ws endpoint
 func ChatWebSocket(c *gin.Context) {
 	userID := c.Query("user")
 	target := c.Query("target")
 	room := makeRoomID(userID, target)
 
-	log.Println("New WebSocket:", userID, "→", target, "Room:", room)
+	// 커넥션 로그
+	// log.Println("[WebSocket] new connection:", userID, "→", target, "Room:", room)
 
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
+		log.Println("[WebSocket] upgrade error:", err)
 		return
 	}
-	client := &chatClient{id: userID, room: room, conn: conn, hub: hub, send: make(chan chatMessage, 8)}
+
+	client := &chatClient{
+		id:   userID,
+		room: room,
+		conn: conn,
+		hub:  hub,
+		send: make(chan chatMessage, 16),
+	}
+
 	hub.register(client)
 	go client.writePump()
 	client.readPump()

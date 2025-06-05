@@ -45,7 +45,6 @@
 			const fetchUsers = async () => {
 				const res = await fetch("/adm/api/users");
 				const data = await res.json();
-				// console.log("data ", data)
 				users.value = data.data.filter((u) => u.u_id !== myId); // 내 계정 제외
 				// users.value = data.data;
 			};
@@ -60,12 +59,19 @@
 					const json = await res.json();
 					// json.data는 ChatMessage 배열
 					// 기존 WebSocket 메시지 포맷({from,to,content,time})과 다르므로 적절히 매핑
-					messages.value = json.data.map((m) => ({
-						from: m.sender_id,
-						to: m.receiver_id,
-						content: m.content,
-						time: new Date(m.timestamp).getTime() // Unix 밀리세컨드
-					}));
+					messages.value = [];
+					if (json.data && json.data.length > 0) {
+						json.data.forEach((m) => {
+							const msg = {
+								from: m.sender_id,
+								to: m.receiver_id,
+								content: m.content,
+								time: new Date(m.timestamp).getTime()
+							};
+							messages.value.push(msg);
+						});
+					}
+
 				} catch (error) {
 					console.error("fetchHistory 에러:", error);
 					throw error;
@@ -77,11 +83,12 @@
 				const newRoomID = [myId, currentUser.value.u_id].sort().join(":");
 
 				if (ws.value && currentRoomID.value === newRoomID && ws.value.readyState === WebSocket.OPEN) {
-					console.log("Already connected to", newRoomID);
+					// console.log("Already connected to", newRoomID);
 					return;
 				}
 
 				if (ws.value) {
+    				// console.log("[connect] 이전 WebSocket 닫기 ", ws.value);
 					ws.value.messages = null;
 					ws.value.close();
 					ws.value = null;
@@ -94,7 +101,7 @@
 				ws.value.onmessage = (e) => {
 					const msg = JSON.parse(e.data);
 					messages.value.push(msg);
-					console.log("Received from server:", msg, "Socket:", ws.value, "Room:", currentRoomID.value);
+					// console.log("Received from server:", msg, "Socket:", ws.value, "Room:", currentRoomID.value);
 
 					nextTick(() => {
 						if (chatBox.value) chatBox.value.scrollTop = chatBox.value.scrollHeight;
@@ -102,11 +109,11 @@
 				};
 
 				ws.value.onopen = () => {
-					console.log("WebSocket opened to", newRoomID);
-					messages.value = []; // 방 전환 시 메시지 초기화
+					// console.log("WebSocket opened to", newRoomID);
+					// messages.value = []; // 방 전환 시 메시지 초기화
 				};
 				ws.value.onclose = () => {
-					console.log("WebSocket closed:", currentRoomID.value);
+					// console.log("WebSocket closed:", currentRoomID.value);
 					currentRoomID.value = null;
 				};
 			};
@@ -129,7 +136,7 @@
 				// DB에서 채팅 내역 불러오기
 				fetchHistory(newRoomID)
 					.then(() => {
-						// 3) WebSocket 연결
+						// WebSocket 연결
 						connect();
 					})
 					.catch((err) => {
@@ -148,10 +155,8 @@
 					time: Date.now()
 				};
 
-				console.log("Sending:", msg);
-				// ws.value.send(JSON.stringify(msg));
-				// messages.value.push(msg);
-				// newMessage.value = "";
+				// console.log("Sending:", msg);
+				// console.log("ws.value:", ws.value);
 
 				// HTTP POST로 DB에 저장
 				fetch("/adm/api/chat/message", {
@@ -171,19 +176,17 @@
 						return res.json();
 					})
 					.then((json) => {
-						// DB 저장 성공 → WebSocket으로 브로드캐스트
 						ws.value.send(JSON.stringify(msg));
 						newMessage.value = "";
-						// (로컬 메시지에도 바로 추가하고 싶으면 주석 해제)
-						// messages.value.push(msg);
+						// console.log("전송성공:", messages.value);
+
 						nextTick(() => {
 							if (chatBox.value) chatBox.value.scrollTop = chatBox.value.scrollHeight;
 						});
 					})
 					.catch((err) => {
 						console.error("메시지 DB 저장 중 에러:", err);
-						// 필요하다면 사용자에게 오류 알림
-						alert("메시지를 서버에 저장하지 못했습니다.");
+						alert("메시지를 저장하지 못했습니다.");
 					});
 			};
 
