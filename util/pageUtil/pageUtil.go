@@ -128,19 +128,6 @@ func MakeMenuRole(c *gin.Context, userRole string, isOutRole bool) []map[string]
 	orderMap := map[string]bool{}
 	orderList := []string{}
 
-	// dataMg, err := core.BuildSelectQuery(c, nil, `
-	// 		SELECT
-	// 			mg.mg_idx AS group_id,
-	// 			mg.mg_label AS group_label,
-	// 			mg.mg_order AS group_order
-	// 		FROM _menu_groups mg
-	// 		ORDER BY mg.mg_order `, []string{}, "get Menu sql err")
-	// if err != nil {
-	// 	c.Redirect(http.StatusFound, "/adm/manage/login")
-	// 	c.Abort()
-	// 	return nil
-	// }
-
 	dataMi, err := core.BuildSelectQuery(c, nil, `
 			SELECT
 				mg.mg_idx AS group_id,
@@ -160,19 +147,6 @@ func MakeMenuRole(c *gin.Context, userRole string, isOutRole bool) []map[string]
 		c.Abort()
 		return nil
 	}
-
-	// for _, row := range dataMg {
-	// 	key := row["group_id"]
-	// 	if _, exists := groupMap[key]; !exists {
-	// 		groupMap[key] = map[string]interface{}{
-	// 			"ID":      key,
-	// 			"Label":   row["group_label"],
-	// 			"Order":   row["group_order"],
-	// 			"IsGroup": "Y",
-	// 			"Items":   []map[string]string{},
-	// 		}
-	// 	}
-	// }
 
 	for _, row := range dataMi {
 		roles := []string{}

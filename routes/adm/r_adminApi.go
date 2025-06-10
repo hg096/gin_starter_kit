@@ -255,7 +255,8 @@ func apiAdmMenusItemDel(c *gin.Context) {
 			FROM _menu_items mi
 			join _menu_groups mg on mi.mi_group_id = mg.mg_idx
 			join _menu_items mi2 on mi2.mi_group_id = mg.mg_idx
-			where mi.mi_idx = ? GROUP BY mi2.mi_idx`, []string{getData["id"]}, "get Menu sql err")
+			where mi.mi_idx = ?
+			GROUP BY mg.mg_idx `, []string{getData["id"]}, "get Menu sql err")
 	if err != nil {
 		util.EndResponse(c, http.StatusBadRequest, gin.H{"data": ""}, "rest apiAdmMenusItemDel")
 		return
@@ -270,6 +271,7 @@ func apiAdmMenusItemDel(c *gin.Context) {
 
 	if 2 > menuCnt {
 		core.BuildDeleteQuery(c, tx, "_menu_groups", "mg_idx = ?", []string{dataMi[0]["mg_idx"]}, "apiAdmMenusItemDel")
+		core.BuildDeleteQuery(c, tx, "_menu_items", "mi_group_id = ?", []string{dataMi[0]["mg_idx"]}, "apiAdmMenusItemDel2")
 	}
 	core.BuildDeleteQuery(c, tx, "_menu_items", "mi_idx = ?", []string{getData["id"]}, "apiAdmMenusItemDel")
 
