@@ -27,10 +27,10 @@ type MenuGroup struct {
 }
 
 // 페이지 출력
-func RenderPage(c *gin.Context, page string, customData gin.H) {
+func RenderPage(c *gin.Context, page string, customData gin.H, isMakeMenu bool) {
 
 	data := gin.H{
-		"IsLoggedIn": true,
+		// "IsLoggedIn": true,
 		"UserName":   "",
 		"ShowFooter": true,
 		"Menus":      []map[string]interface{}{},
@@ -49,6 +49,11 @@ func RenderPage(c *gin.Context, page string, customData gin.H) {
 	)
 	if err != nil {
 		log.Fatalf("[종료] 템플릿 로딩 실패: %v", err)
+	}
+
+	if isMakeMenu {
+		userType, _ := util.GetContextVal(c, "user_type")
+		data["Menus"] = MakeMenuRole(c, userType, false)
 	}
 
 	// log.Println("RenderPage ")

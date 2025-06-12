@@ -29,7 +29,7 @@
 	{{end}}
 
 	<main class="flex-1 overflow-y-auto flex flex-col overflow-hidden {{if .IsLoggedIn}}pt-[62px]{{end}} md:pt-0">
-		<div class="{{if .IsLoggedIn}}p-4{{end}}">
+		<div class="p-4">
 			{{block "content" .}}{{end}}
 		</div>
 	</main>

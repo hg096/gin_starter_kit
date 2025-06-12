@@ -12,58 +12,39 @@ import (
 func SetupAdminRoutes(rg *gin.RouterGroup) {
 
 	rg.GET("/", func(c *gin.Context) {
-		// 예시: 세션 또는 쿠키 기반 로그인 정보
+		// 권한체크
 		pageUtil.RenderPageCheckLogin(c, "", 0)
 
-		userType, _ := util.GetContextVal(c, "user_type")
-		menuData := pageUtil.MakeMenuRole(c, userType, false)
-
-		// fmt.Println("menuData >> ")
-		// fmt.Println(menuData)
-
 		pageUtil.RenderPage(c, "home", gin.H{
-			"Menus":    menuData,
 			"UserName": "홍길동",
-		})
+		}, true)
 	})
 
 	rg.GET("/menu", func(c *gin.Context) {
-		// 예시: 세션 또는 쿠키 기반 로그인 정보
 		pageUtil.RenderPageCheckLogin(c, "", 0)
 
-		userType, _ := util.GetContextVal(c, "user_type")
-		menuData := pageUtil.MakeMenuRole(c, userType, false)
-
 		pageUtil.RenderPage(c, "menu", gin.H{
-			"Menus":    menuData,
 			"UserName": "홍길동",
-		})
+		}, true)
 	})
 
 	rg.GET("/users", func(c *gin.Context) {
 		pageUtil.RenderPageCheckLogin(c, "", 0)
 
-		userType, _ := util.GetContextVal(c, "user_type")
-		menuData := pageUtil.MakeMenuRole(c, userType, false)
-
 		pageUtil.RenderPage(c, "user", gin.H{
-			"Menus":    menuData,
 			"UserName": "홍길동",
-		})
+		}, true)
 	})
 
 	rg.GET("/chat", func(c *gin.Context) {
 		pageUtil.RenderPageCheckLogin(c, "", 0)
 
 		userId, _ := util.GetContextVal(c, "user_id")
-		userType, _ := util.GetContextVal(c, "user_type")
-		menuData := pageUtil.MakeMenuRole(c, userType, false)
 
 		pageUtil.RenderPage(c, "chat", gin.H{
-			"Menus":    menuData,
 			"UserName": "홍길동",
 			"MyID":     userId,
-		})
+		}, true)
 	})
 
 	adminGroup := rg.Group("/manage")
@@ -71,7 +52,7 @@ func SetupAdminRoutes(rg *gin.RouterGroup) {
 
 		adminGroup.GET("/login", func(c *gin.Context) {
 			// pageUtil.RenderPageCheckLogin(c, "", 0)
-			pageUtil.RenderPage(c, "login", gin.H{"ShowFooter": false})
+			pageUtil.RenderPage(c, "login", gin.H{"ShowFooter": false}, false)
 		})
 
 		adminGroup.GET("/logout", func(c *gin.Context) {
