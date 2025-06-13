@@ -30,7 +30,7 @@ type MenuGroup struct {
 func RenderPage(c *gin.Context, page string, customData gin.H, isMakeMenu bool) {
 
 	data := gin.H{
-		// "IsLoggedIn": true,
+		"IsLoggedIn": isMakeMenu,
 		"UserName":   "",
 		"ShowFooter": true,
 		"Menus":      []map[string]interface{}{},
