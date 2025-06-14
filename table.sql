@@ -71,15 +71,15 @@ INSERT INTO `_menu_items` (`mi_idx`, `mi_group_id`, `mi_label`, `mi_href`, `mi_r
 	(9, 1, '사용자', '/adm/users', '["A"]', 3),
 	(10, 1, '채팅', '/adm/chat', '["A", "M", "AG"]', 4);
 
-CREATE TABLE `chat_messages` (
-	`id` BIGINT NOT NULL AUTO_INCREMENT,
-	`room_id` VARCHAR(255) NULL DEFAULT NULL COLLATE 'utf8mb4_general_ci',
-	`sender_id` VARCHAR(50) NULL DEFAULT NULL COLLATE 'utf8mb4_general_ci',
-	`receiver_id` VARCHAR(50) NULL DEFAULT NULL COLLATE 'utf8mb4_general_ci',
-	`content` TEXT NULL DEFAULT NULL COLLATE 'utf8mb4_general_ci',
-	`timestamp` TIMESTAMP NOT NULL DEFAULT (CURRENT_TIMESTAMP),
-	PRIMARY KEY (`id`) USING BTREE,
-	INDEX `room_id` (`room_id`)
+CREATE TABLE `_chat_messages` (
+	`cm_idx` BIGINT NOT NULL AUTO_INCREMENT,
+	`cm_room_id` VARCHAR(255) NULL DEFAULT NULL COLLATE 'utf8mb4_general_ci',
+	`cm_sender_id` VARCHAR(50) NULL DEFAULT NULL COLLATE 'utf8mb4_general_ci',
+	`cm_receiver_id` VARCHAR(50) NULL DEFAULT NULL COLLATE 'utf8mb4_general_ci',
+	`cm_content` TEXT NULL DEFAULT NULL COLLATE 'utf8mb4_general_ci',
+	`cm_timestamp` TIMESTAMP NOT NULL DEFAULT (CURRENT_TIMESTAMP),
+	PRIMARY KEY (`cm_idx`) USING BTREE,
+	INDEX `cm_room_id` (`cm_room_id`) USING BTREE
 )
 COLLATE='utf8mb4_general_ci'
 ENGINE=InnoDB

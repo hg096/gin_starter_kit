@@ -27,10 +27,10 @@ func getChatHistory(c *gin.Context) {
 	})
 
 	history, _ := core.BuildSelectQuery(c, nil, `
-        SELECT id, room_id, sender_id, receiver_id, content, timestamp
-        FROM chat_messages
-        WHERE room_id = ?
-        ORDER BY timestamp ASC
+        SELECT cm_idx id, cm_room_id room_id, cm_sender_id sender_id, cm_receiver_id receiver_id, cm_content content, cm_timestamp timestamp
+        FROM _chat_messages
+        WHERE cm_room_id = ?
+        ORDER BY cm_timestamp ASC
     `, []string{getData["room"]}, "getChatHistory")
 
 	c.JSON(http.StatusOK, gin.H{"data": history})
@@ -40,18 +40,18 @@ func postChatMessage(c *gin.Context) {
 	pageUtil.RenderPageCheckLogin(c, "", 0)
 
 	postData := util.PostFields(c, map[string][2]string{
-		"room_id":     {"room_id", ""},
-		"sender_id":   {"sender_id", ""},
-		"receiver_id": {"receiver_id", ""},
-		"content":     {"content", ""},
+		"room_id":     {"cm_room_id", ""},
+		"sender_id":   {"cm_sender_id", ""},
+		"receiver_id": {"cm_receiver_id", ""},
+		"content":     {"cm_content", ""},
 	})
 
-	if !util.EmptyString(postData["room_id"]) {
-		lastID, _ := core.BuildInsertQuery(c, nil, "chat_messages", map[string]string{
-			"room_id":     postData["room_id"],
-			"sender_id":   postData["sender_id"],
-			"receiver_id": postData["receiver_id"],
-			"content":     postData["content"],
+	if !util.EmptyString(postData["cm_room_id"]) {
+		lastID, _ := core.BuildInsertQuery(c, nil, "_chat_messages", map[string]string{
+			"cm_room_id":     postData["cm_room_id"],
+			"cm_sender_id":   postData["cm_sender_id"],
+			"cm_receiver_id": postData["cm_receiver_id"],
+			"cm_content":     postData["cm_content"],
 		}, "postChatMessage")
 
 		c.JSON(http.StatusOK, gin.H{

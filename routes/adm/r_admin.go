@@ -40,9 +40,10 @@ func SetupAdminRoutes(rg *gin.RouterGroup) {
 		pageUtil.RenderPageCheckLogin(c, "", 0)
 
 		userId, _ := util.GetContextVal(c, "user_id")
+		UserName, _ := util.GetContextVal(c, "user_name")
 
 		pageUtil.RenderPage(c, "chat", gin.H{
-			"UserName": "홍길동",
+			"UserName": UserName,
 			"MyID":     userId,
 		}, true)
 	})

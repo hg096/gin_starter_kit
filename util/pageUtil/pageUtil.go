@@ -92,7 +92,7 @@ func RenderPageCheckLogin(c *gin.Context, userType string, lv int8) []map[string
 		SetCookie(c, "ref_token", newRT, 60*60*24*7)
 	}
 
-	result, err := core.BuildSelectQuery(c, nil, "select u_auth_type, u_auth_level from _user where u_id = ? AND u_auth_type != 'U' ", []string{claims.JWTUserID}, "JWTAuthMiddleware.err")
+	result, err := core.BuildSelectQuery(c, nil, "select u_auth_type, u_auth_level, u_name, u_email from _user where u_id = ? AND u_auth_type != 'U' ", []string{claims.JWTUserID}, "JWTAuthMiddleware.err")
 	if err != nil {
 		c.Redirect(http.StatusFound, "/adm/manage/login")
 		c.Abort()
@@ -120,9 +120,13 @@ func RenderPageCheckLogin(c *gin.Context, userType string, lv int8) []map[string
 			return nil
 		}
 	}
+
+	// 회원 정보 세팅
 	c.Set("user_id", claims.JWTUserID)
 	c.Set("user_type", result[0]["u_auth_type"])
 	c.Set("user_level", result[0]["u_auth_level"])
+	c.Set("user_name", result[0]["u_name"])
+	c.Set("user_email", result[0]["u_email"])
 
 	return nil
 }
