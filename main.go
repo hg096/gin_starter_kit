@@ -6,7 +6,7 @@ import (
 
 	"gin_starter/db"
 	"gin_starter/routes"
-	"gin_starter/util"
+	"gin_starter/util/utilCore"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -19,13 +19,13 @@ func main() {
 	}
 
 	ginMode := os.Getenv("GIN_MODE")
-	if util.EmptyString(ginMode) {
+	if utilCore.EmptyString(ginMode) {
 		ginMode = gin.DebugMode // 기본적으로 debug 모드를 사용
 	}
 	gin.SetMode(ginMode)
 
 	port := os.Getenv("PORT")
-	if util.EmptyString(port) {
+	if utilCore.EmptyString(port) {
 		port = "8080"
 	}
 

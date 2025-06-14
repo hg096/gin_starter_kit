@@ -1,4 +1,4 @@
-package core
+package dbCore
 
 import (
 	"sync"

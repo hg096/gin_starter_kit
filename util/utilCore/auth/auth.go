@@ -5,8 +5,8 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
-	"gin_starter/model/core"
-	"gin_starter/util"
+	"gin_starter/model/dbCore"
+	"gin_starter/util/utilCore"
 	"io"
 	"log"
 	"strings"
@@ -68,7 +68,7 @@ func NewEncryptedToken(userID string, expMin int, signingKey []byte, encryptionK
 	now := time.Now()
 
 	serviceName := os.Getenv("SERVICE_NAME")
-	if util.EmptyString(serviceName) {
+	if utilCore.EmptyString(serviceName) {
 		serviceName = "ginStart"
 	}
 
@@ -248,8 +248,8 @@ func RefreshHandler(c *gin.Context, postData map[string]string) (accessToken str
 	}
 
 	// 디비 검증
-	resultUser, err := core.BuildSelectQuery(c, nil, "select u_re_token from _user where u_re_token = ? ", []string{postData["refresh_token"]}, "RefreshHandler.err")
-	if err != nil || util.EmptyString(resultUser[0]["u_re_token"]) {
+	resultUser, err := dbCore.BuildSelectQuery(c, nil, "select u_re_token from _user where u_re_token = ? ", []string{postData["refresh_token"]}, "RefreshHandler.err")
+	if err != nil || utilCore.EmptyString(resultUser[0]["u_re_token"]) {
 		return "", "", "fn auth/RefreshHandler-BuildSelectQuery"
 	}
 
@@ -259,7 +259,7 @@ func RefreshHandler(c *gin.Context, postData map[string]string) (accessToken str
 		return "", "", "fn auth/RefreshHandler-GenerateTokens"
 	}
 
-	_, err = core.BuildUpdateQuery(c, nil, "_user", map[string]string{"u_re_token": newRT}, "u_re_token = ?", []string{postData["refresh_token"]}, "fn auth/RefreshHandler-BuildUpdateQuery")
+	_, err = dbCore.BuildUpdateQuery(c, nil, "_user", map[string]string{"u_re_token": newRT}, "u_re_token = ?", []string{postData["refresh_token"]}, "fn auth/RefreshHandler-BuildUpdateQuery")
 	if err != nil {
 		return "", "", "fn auth/RefreshHandler-BuildUpdateQuery"
 	}
@@ -273,19 +273,19 @@ func JWTAuthMiddleware(userType string, lv int8) gin.HandlerFunc {
 		h := c.GetHeader("Authorization")
 		parts := strings.SplitN(h, " ", 2)
 		if len(parts) != 2 || parts[0] != "Bearer" {
-			util.EndResponse(c, http.StatusBadRequest, gin.H{"TOKEN": "N"}, "fn auth/JWTAuthMiddleware")
+			utilCore.EndResponse(c, http.StatusBadRequest, gin.H{"TOKEN": "N"}, "fn auth/JWTAuthMiddleware")
 			return
 		}
 
 		claims, err := ValidateToken(parts[1], AccessSecret, TokenSecret)
 		if err != nil {
-			util.EndResponse(c, http.StatusBadRequest, gin.H{"TOKEN": "R"}, "fn auth/JWTAuthMiddleware-ValidateToken")
+			utilCore.EndResponse(c, http.StatusBadRequest, gin.H{"TOKEN": "R"}, "fn auth/JWTAuthMiddleware-ValidateToken")
 			return
 		}
 
-		result, err := core.BuildSelectQuery(c, nil, "select u_auth_type, u_auth_level from _user where u_id = ? ", []string{claims.JWTUserID}, "JWTAuthMiddleware.err")
+		result, err := dbCore.BuildSelectQuery(c, nil, "select u_auth_type, u_auth_level from _user where u_id = ? ", []string{claims.JWTUserID}, "JWTAuthMiddleware.err")
 		if err != nil {
-			util.EndResponse(c, http.StatusBadRequest, gin.H{}, "fn auth/JWTAuthMiddleware-BuildSelectQuery")
+			utilCore.EndResponse(c, http.StatusBadRequest, gin.H{}, "fn auth/JWTAuthMiddleware-BuildSelectQuery")
 			return
 		}
 
@@ -294,16 +294,16 @@ func JWTAuthMiddleware(userType string, lv int8) gin.HandlerFunc {
 			// 만약에 타입이 두가지 이상 들어가야할때
 			index := strings.Index(userType, result[0]["u_auth_type"])
 			if index < 0 {
-				util.EndResponse(c, http.StatusBadRequest, gin.H{}, "fn auth/JWTAuthMiddleware-type")
+				utilCore.EndResponse(c, http.StatusBadRequest, gin.H{}, "fn auth/JWTAuthMiddleware-type")
 			}
 			return
 		}
 
 		// 등급 레벨 조건이 맞는지 확인
 		if lv > 0 {
-			u_auth_level, _ := util.StringToNumeric[int8](result[0]["u_auth_level"])
+			u_auth_level, _ := utilCore.StringToNumeric[int8](result[0]["u_auth_level"])
 			if lv > u_auth_level {
-				util.EndResponse(c, http.StatusBadRequest, gin.H{}, "fn auth/JWTAuthMiddleware-level")
+				utilCore.EndResponse(c, http.StatusBadRequest, gin.H{}, "fn auth/JWTAuthMiddleware-level")
 				return
 			}
 		}

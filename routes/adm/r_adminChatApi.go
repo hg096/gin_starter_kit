@@ -1,9 +1,9 @@
 package adm
 
 import (
-	"gin_starter/model/core"
-	"gin_starter/util"
-	"gin_starter/util/pageUtil"
+	"gin_starter/model/dbCore"
+	"gin_starter/util/utilCore"
+	"gin_starter/util/utilCore/pageUtil"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -22,11 +22,11 @@ func getChatHistory(c *gin.Context) {
 
 	pageUtil.RenderPageCheckLogin(c, "", 0)
 
-	getData := util.GetFields(c, map[string][2]string{
+	getData := utilCore.GetFields(c, map[string][2]string{
 		"room": {"room", "0"},
 	})
 
-	history, _ := core.BuildSelectQuery(c, nil, `
+	history, _ := dbCore.BuildSelectQuery(c, nil, `
         SELECT cm_idx id, cm_room_id room_id, cm_sender_id sender_id, cm_receiver_id receiver_id, cm_content content, cm_timestamp timestamp
         FROM _chat_messages
         WHERE cm_room_id = ?
@@ -39,15 +39,15 @@ func postChatMessage(c *gin.Context) {
 
 	pageUtil.RenderPageCheckLogin(c, "", 0)
 
-	postData := util.PostFields(c, map[string][2]string{
+	postData := utilCore.PostFields(c, map[string][2]string{
 		"room_id":     {"cm_room_id", ""},
 		"sender_id":   {"cm_sender_id", ""},
 		"receiver_id": {"cm_receiver_id", ""},
 		"content":     {"cm_content", ""},
 	})
 
-	if !util.EmptyString(postData["cm_room_id"]) {
-		lastID, _ := core.BuildInsertQuery(c, nil, "_chat_messages", map[string]string{
+	if !utilCore.EmptyString(postData["cm_room_id"]) {
+		lastID, _ := dbCore.BuildInsertQuery(c, nil, "_chat_messages", map[string]string{
 			"cm_room_id":     postData["cm_room_id"],
 			"cm_sender_id":   postData["cm_sender_id"],
 			"cm_receiver_id": postData["cm_receiver_id"],

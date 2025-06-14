@@ -3,9 +3,9 @@ package api
 import (
 	"fmt"
 	"gin_starter/model"
-	"gin_starter/model/core"
-	"gin_starter/util"
-	"gin_starter/util/auth"
+	"gin_starter/model/dbCore"
+	"gin_starter/util/utilCore"
+	"gin_starter/util/utilCore/auth"
 	"log"
 	"net/http"
 
@@ -14,7 +14,7 @@ import (
 
 func SetupUserRoutes(rg *gin.RouterGroup) {
 
-	// Util := util.GetInstance()
+	// Util := utilCore.GetInstance()
 
 	userGroup := rg.Group("/user")
 	{
@@ -52,7 +52,7 @@ func SetupUserRoutes(rg *gin.RouterGroup) {
 // @Summary 사용자 테스트
 // @Router /api/user/ [get]
 func apiUser(c *gin.Context) {
-	util.EndResponse(c, http.StatusOK, gin.H{"message": "User list"}, "rest /user")
+	utilCore.EndResponse(c, http.StatusOK, gin.H{"message": "User list"}, "rest /user")
 }
 
 // 가입
@@ -60,7 +60,7 @@ func apiUserMake(c *gin.Context) {
 
 	user := model.NewUser()
 
-	data := util.PostFields(c, map[string][2]string{
+	data := utilCore.PostFields(c, map[string][2]string{
 		"user_id":    {"u_id", ""},
 		"user_pass":  {"u_pass", ""},
 		"user_name":  {"u_name", ""},
@@ -70,7 +70,7 @@ func apiUserMake(c *gin.Context) {
 	data["u_auth_type"] = "U"
 
 	// 트랜젝션 예시 불필요할시 제거
-	tx, err := core.BeginTransaction(c)
+	tx, err := dbCore.BeginTransaction(c)
 	if err != nil {
 		return
 	}
@@ -82,13 +82,13 @@ func apiUserMake(c *gin.Context) {
 	}
 
 	// 트랜젝션 예시 불필요할시 제거
-	if err := core.EndTransactionCommit(tx); err != nil {
+	if err := dbCore.EndTransactionCommit(tx); err != nil {
 		return
 	}
 
 	fmt.Printf("User가 성공적으로 추가 되었습니다. Inserted ID: %s\n", insertedID)
 
-	util.EndResponse(c, http.StatusOK, gin.H{"message": "User make"}, "rest /user/make")
+	utilCore.EndResponse(c, http.StatusOK, gin.H{"message": "User make"}, "rest /user/make")
 }
 
 // 수정
@@ -96,7 +96,7 @@ func apiUserMakeUp(c *gin.Context) {
 
 	user := model.NewUpUser()
 
-	data := util.PostFields(c, map[string][2]string{
+	data := utilCore.PostFields(c, map[string][2]string{
 		"user_id": {"u_id", ""},
 		// "user_pass":  {"u_pass", ""},
 		// "user_name":  {"u_name", ""},
@@ -111,55 +111,55 @@ func apiUserMakeUp(c *gin.Context) {
 		// fmt.Printf("User가 성공적으로 수정 되었습니다. Inserted ID: %s\n", sqlResult)
 	}
 
-	util.EndResponse(c, http.StatusOK, gin.H{"message": "User update"}, "rest /user/makeUp")
+	utilCore.EndResponse(c, http.StatusOK, gin.H{"message": "User update"}, "rest /user/makeUp")
 }
 
 // 로그인
 func apiUserLogIn(c *gin.Context) {
 
-	data := util.PostFields(c, map[string][2]string{
+	data := utilCore.PostFields(c, map[string][2]string{
 		"user_id":   {"u_id", ""},
 		"user_pass": {"u_pass", ""},
 	})
 
 	at, rt, err := auth.GenerateTokens(data["u_id"], "")
 	if err != nil {
-		util.EndResponse(c, http.StatusBadRequest, gin.H{}, "rest /user/login-GenerateTokens")
+		utilCore.EndResponse(c, http.StatusBadRequest, gin.H{}, "rest /user/login-GenerateTokens")
 		return
 	}
 
-	_, err = core.BuildUpdateQuery(c, nil, "_user", map[string]string{"u_re_token": rt}, "u_id = ?", []string{data["u_id"]}, "fn apiUserLogIn-BuildUpdateQuery")
+	_, err = dbCore.BuildUpdateQuery(c, nil, "_user", map[string]string{"u_re_token": rt}, "u_id = ?", []string{data["u_id"]}, "fn apiUserLogIn-BuildUpdateQuery")
 	if err != nil {
-		util.EndResponse(c, http.StatusBadRequest, gin.H{}, "fn apiUserLogIn-BuildUpdateQuery")
+		utilCore.EndResponse(c, http.StatusBadRequest, gin.H{}, "fn apiUserLogIn-BuildUpdateQuery")
 		return
 	}
 
-	util.EndResponse(c, http.StatusOK, gin.H{"access_token": at, "refresh_token": rt}, "rest /user/login")
+	utilCore.EndResponse(c, http.StatusOK, gin.H{"access_token": at, "refresh_token": rt}, "rest /user/login")
 }
 
 // 로그아웃
 func apiUserLogOut(c *gin.Context) {
 
 	// refToken, _ := c.Cookie("ref_token")
-	userId, _ := util.GetContextVal(c, "user_id")
+	userId, _ := utilCore.GetContextVal(c, "user_id")
 
-	_, _ = core.BuildUpdateQuery(c, nil, "_user", map[string]string{"u_re_token": ""}, "u_id = ?", []string{userId}, "apiUserLogOut-BuildUpdateQuery")
+	_, _ = dbCore.BuildUpdateQuery(c, nil, "_user", map[string]string{"u_re_token": ""}, "u_id = ?", []string{userId}, "apiUserLogOut-BuildUpdateQuery")
 
-	util.EndResponse(c, http.StatusOK, gin.H{"message": "User logout"}, "rest /user/logout")
+	utilCore.EndResponse(c, http.StatusOK, gin.H{"message": "User logout"}, "rest /user/logout")
 }
 
 // 토큰 재발급
 func refreshUserToken(c *gin.Context) {
 
-	postData := util.PostFields(c, map[string][2]string{
+	postData := utilCore.PostFields(c, map[string][2]string{
 		"refresh_token": {"refresh_token", ""},
 	})
 	newAT, newRT, errMsg := auth.RefreshHandler(c, postData)
-	if !util.EmptyString(errMsg) {
-		util.EndResponse(c, http.StatusBadRequest, gin.H{}, errMsg)
+	if !utilCore.EmptyString(errMsg) {
+		utilCore.EndResponse(c, http.StatusBadRequest, gin.H{}, errMsg)
 		return
 	}
-	util.EndResponse(c, http.StatusOK, gin.H{
+	utilCore.EndResponse(c, http.StatusOK, gin.H{
 		"access_token":  newAT,
 		"refresh_token": newRT,
 	}, "fn auth/RefreshHandler-end")
@@ -167,8 +167,8 @@ func refreshUserToken(c *gin.Context) {
 
 // 프로필 조회
 func apiUserProfile(c *gin.Context) {
-	uid := util.GetBindField(c, "user_id", "")
+	uid := utilCore.GetBindField(c, "user_id", "")
 	userID := c.MustGet("user_id").(string)
 
-	util.EndResponse(c, 200, gin.H{"user": uid, "userID": userID}, "rest /user/profile")
+	utilCore.EndResponse(c, 200, gin.H{"user": uid, "userID": userID}, "rest /user/profile")
 }

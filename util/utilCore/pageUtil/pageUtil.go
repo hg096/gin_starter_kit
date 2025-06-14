@@ -3,9 +3,9 @@ package pageUtil
 import (
 	"encoding/json"
 	"fmt"
-	"gin_starter/model/core"
-	"gin_starter/util"
-	"gin_starter/util/auth"
+	"gin_starter/model/dbCore"
+	"gin_starter/util/utilCore"
+	"gin_starter/util/utilCore/auth"
 	"log"
 	"net/http"
 	"strings"
@@ -52,7 +52,7 @@ func RenderPage(c *gin.Context, page string, customData gin.H, isMakeMenu bool) 
 	}
 
 	if isMakeMenu {
-		userType, _ := util.GetContextVal(c, "user_type")
+		userType, _ := utilCore.GetContextVal(c, "user_type")
 		data["Menus"] = MakeMenuRole(c, userType, false)
 	}
 
@@ -83,8 +83,8 @@ func RenderPageCheckLogin(c *gin.Context, userType string, lv int8) []map[string
 	claims, err := auth.ValidateToken(token, auth.AccessSecret, auth.TokenSecret)
 	if err != nil {
 		newAT, newRT, errMsg := auth.RefreshHandler(c, map[string]string{"refresh_token": refToken})
-		if !util.EmptyString(errMsg) {
-			util.EndResponse(c, http.StatusBadRequest, gin.H{}, errMsg)
+		if !utilCore.EmptyString(errMsg) {
+			utilCore.EndResponse(c, http.StatusBadRequest, gin.H{}, errMsg)
 			return nil
 		}
 		claims, _ = auth.ValidateToken(newAT, auth.AccessSecret, auth.TokenSecret)
@@ -92,7 +92,7 @@ func RenderPageCheckLogin(c *gin.Context, userType string, lv int8) []map[string
 		SetCookie(c, "ref_token", newRT, 60*60*24*7)
 	}
 
-	result, err := core.BuildSelectQuery(c, nil, "select u_auth_type, u_auth_level, u_name, u_email from _user where u_id = ? AND u_auth_type != 'U' ", []string{claims.JWTUserID}, "JWTAuthMiddleware.err")
+	result, err := dbCore.BuildSelectQuery(c, nil, "select u_auth_type, u_auth_level, u_name, u_email from _user where u_id = ? AND u_auth_type != 'U' ", []string{claims.JWTUserID}, "JWTAuthMiddleware.err")
 	if err != nil {
 		c.Redirect(http.StatusFound, "/adm/manage/login")
 		c.Abort()
@@ -100,7 +100,7 @@ func RenderPageCheckLogin(c *gin.Context, userType string, lv int8) []map[string
 	}
 
 	// 사용자 타입 찾기
-	if !util.EmptyString(userType) && result[0]["u_auth_type"] != userType {
+	if !utilCore.EmptyString(userType) && result[0]["u_auth_type"] != userType {
 		// 만약에 타입이 두가지 이상 들어가야할때
 		index := strings.Index(userType, result[0]["u_auth_type"])
 		if index < 0 {
@@ -113,7 +113,7 @@ func RenderPageCheckLogin(c *gin.Context, userType string, lv int8) []map[string
 
 	// 등급 레벨 조건이 맞는지 확인
 	if lv > 0 {
-		u_auth_level, _ := util.StringToNumeric[int8](result[0]["u_auth_level"])
+		u_auth_level, _ := utilCore.StringToNumeric[int8](result[0]["u_auth_level"])
 		if lv > u_auth_level {
 			c.Redirect(http.StatusFound, "/adm/manage/login")
 			c.Abort()
@@ -137,7 +137,7 @@ func MakeMenuRole(c *gin.Context, userRole string, isOutRole bool) []map[string]
 	orderMap := map[string]bool{}
 	orderList := []string{}
 
-	dataMi, err := core.BuildSelectQuery(c, nil, `
+	dataMi, err := dbCore.BuildSelectQuery(c, nil, `
 			SELECT
 				mg.mg_idx AS group_id,
 				mg.mg_label AS group_label,
@@ -177,7 +177,7 @@ func MakeMenuRole(c *gin.Context, userRole string, isOutRole bool) []map[string]
 		key := row["item_group"]
 		var item map[string]string
 
-		if !util.EmptyBool(isOutRole) {
+		if !utilCore.EmptyBool(isOutRole) {
 			item = map[string]string{
 				"ID":    row["item_id"],
 				"Label": row["item_label"],

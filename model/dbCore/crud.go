@@ -1,11 +1,11 @@
-package core
+package dbCore
 
 import (
 	"database/sql"
 	"errors"
 	"fmt"
 	"gin_starter/db"
-	"gin_starter/util"
+	"gin_starter/util/utilCore"
 	"net/http"
 	"strconv"
 	"strings"
@@ -63,7 +63,7 @@ func HandleSqlError(c *gin.Context, tx *sql.Tx,
 		// log.Println("DB 연결이 설정되어 있지 않아 에러 로그를 저장하지 못했습니다.")
 	}
 
-	util.EndResponse(c, http.StatusBadRequest, gin.H{"errCode": errCode}, "fn crud/HandleSqlError")
+	utilCore.EndResponse(c, http.StatusBadRequest, gin.H{"errCode": errCode}, "fn crud/HandleSqlError")
 }
 
 // 유효성 검사 실패시 에러 문구리턴
@@ -112,7 +112,7 @@ func HandleValidationError(c *gin.Context, tx *sql.Tx, err error, converts map[s
 	var ve v10.ValidationErrors
 	if errors.As(err, &ve) {
 		msgs := FormatValidationErrors(ve, converts)
-		util.EndResponse(c, http.StatusBadRequest, gin.H{"errors": msgs}, "fn crud/HandleValidationError")
+		utilCore.EndResponse(c, http.StatusBadRequest, gin.H{"errors": msgs}, "fn crud/HandleValidationError")
 	}
 	return true
 }
@@ -174,7 +174,7 @@ func BuildSelectQuery(c *gin.Context, tx *sql.Tx,
 	}
 
 	// 문자열 슬라이스 → interface{} 슬라이스로 변환
-	interArgs := util.ToInterfaceSlice(args)
+	interArgs := utilCore.ToInterfaceSlice(args)
 
 	rows, err := db.Conn.Query(query, interArgs...)
 	if err != nil {
@@ -237,7 +237,7 @@ func BuildInsertQuery(c *gin.Context, tx *sql.Tx,
 		strings.Join(columns, ", "),
 		strings.Join(placeholders, ", "),
 	)
-	result, err := db.Conn.Exec(query, util.ToInterfaceSlice(args)...)
+	result, err := db.Conn.Exec(query, utilCore.ToInterfaceSlice(args)...)
 	if err != nil {
 		fullQuery := SubstituteQuery(query, args)
 		HandleSqlError(c, tx, fullQuery, 0, errWhere, err)
@@ -306,7 +306,7 @@ func BuildUpdateQuery(c *gin.Context, tx *sql.Tx,
 	query := fmt.Sprintf("UPDATE %s SET %s WHERE %s", tableName, setPart, safeWhere)
 	args = append(args, whereArgs...)
 
-	result, err := db.Conn.Exec(query, util.ToInterfaceSlice(args)...)
+	result, err := db.Conn.Exec(query, utilCore.ToInterfaceSlice(args)...)
 	if err != nil {
 		fullQuery := SubstituteQuery(query, args)
 		HandleSqlError(c, tx, fullQuery, 0, errWhere, err)
@@ -326,7 +326,7 @@ func BuildDeleteQuery(c *gin.Context, tx *sql.Tx,
 	query := fmt.Sprintf("DELETE FROM %s WHERE %s", tableName, safeWhere)
 
 	// parameterized query 방식
-	result, err := db.Conn.Exec(query, util.ToInterfaceSlice(whereArgs)...)
+	result, err := db.Conn.Exec(query, utilCore.ToInterfaceSlice(whereArgs)...)
 	if err != nil {
 		HandleSqlError(c, tx, query, 0, errWhere, err)
 		return nil, err
@@ -380,7 +380,7 @@ func BuildInsertQueryMulti(c *gin.Context, tx *sql.Tx,
 		strings.Join(valueRows, ", "),
 	)
 
-	result, err := db.Conn.Exec(query, util.ToInterfaceSlice(args)...)
+	result, err := db.Conn.Exec(query, utilCore.ToInterfaceSlice(args)...)
 	if err != nil {
 		fullQuery := SubstituteQuery(query, args)
 		HandleSqlError(c, tx, fullQuery, 0, errWhere, err)

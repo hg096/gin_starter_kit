@@ -2,13 +2,13 @@ package model
 
 import (
 	"database/sql"
-	"gin_starter/model/core"
+	"gin_starter/model/dbCore"
 
 	"github.com/gin-gonic/gin"
 )
 
 type MenuGroup struct {
-	core.BaseModel
+	dbCore.BaseModel
 	ValidateConverts map[string]string
 	TableName        string
 	Key              string     `db:"key"`
@@ -19,7 +19,7 @@ type MenuGroup struct {
 
 func NewMenuGroup() *MenuGroup {
 	return &MenuGroup{
-		BaseModel: core.NewBaseModel(),
+		BaseModel: dbCore.NewBaseModel(),
 		// ValidateConverts: map[string]string{
 		// 	"Key":   "구분명",
 		// 	"Label": "그룹명",
@@ -30,7 +30,7 @@ func NewMenuGroup() *MenuGroup {
 }
 
 type MenuItem struct {
-	core.BaseModel
+	dbCore.BaseModel
 	ValidateConverts map[string]string
 	TableName        string
 	Label            string   `db:"label"`
@@ -41,7 +41,7 @@ type MenuItem struct {
 
 func NewMenuItem() *MenuItem {
 	return &MenuItem{
-		BaseModel: core.NewBaseModel(),
+		BaseModel: dbCore.NewBaseModel(),
 		// ValidateConverts: map[string]string{
 		// 	"Label": "메뉴명",
 		// 	"Href":  "주소",
@@ -55,7 +55,7 @@ func NewMenuItem() *MenuItem {
 func (u *MenuGroup) AddMenuGroup(c *gin.Context, tx *sql.Tx,
 	data map[string]string, errWhere string) (string, error, error) {
 
-	insertedID, err := core.BuildInsertQuery(c, tx, u.TableName, data, errWhere)
+	insertedID, err := dbCore.BuildInsertQuery(c, tx, u.TableName, data, errWhere)
 	if err != nil {
 		return "0", nil, err
 	}
@@ -65,7 +65,7 @@ func (u *MenuGroup) AddMenuGroup(c *gin.Context, tx *sql.Tx,
 func (u *MenuGroup) UpdateMenuGroup(c *gin.Context, tx *sql.Tx,
 	data map[string]string, where string, whereData []string, errWhere string) (error, error) {
 
-	_, err := core.BuildUpdateQuery(c, tx, u.TableName, data, where, whereData, errWhere)
+	_, err := dbCore.BuildUpdateQuery(c, tx, u.TableName, data, where, whereData, errWhere)
 	if err != nil {
 		return nil, err
 	}
@@ -76,7 +76,7 @@ func (u *MenuGroup) UpdateMenuGroup(c *gin.Context, tx *sql.Tx,
 func (u *MenuGroup) DeleteMenuGroup(c *gin.Context, tx *sql.Tx,
 	data map[string]string, where string, whereData []string, errWhere string) (error, error) {
 
-	_, err := core.BuildDeleteQuery(c, tx, u.TableName, where, whereData, errWhere)
+	_, err := dbCore.BuildDeleteQuery(c, tx, u.TableName, where, whereData, errWhere)
 	if err != nil {
 		return nil, err
 	}
@@ -86,7 +86,7 @@ func (u *MenuGroup) DeleteMenuGroup(c *gin.Context, tx *sql.Tx,
 func (u *MenuItem) AddMenuItem(c *gin.Context, tx *sql.Tx,
 	data map[string]string, errWhere string) (string, error, error) {
 
-	insertedID, err := core.BuildInsertQuery(c, tx, u.TableName, data, errWhere)
+	insertedID, err := dbCore.BuildInsertQuery(c, tx, u.TableName, data, errWhere)
 	if err != nil {
 		return "0", nil, err
 	}
@@ -96,7 +96,7 @@ func (u *MenuItem) AddMenuItem(c *gin.Context, tx *sql.Tx,
 func (u *MenuItem) UpdateMenuItem(c *gin.Context, tx *sql.Tx,
 	data map[string]string, where string, whereData []string, errWhere string) (error, error) {
 
-	_, err := core.BuildUpdateQuery(c, tx, u.TableName, data, where, whereData, errWhere)
+	_, err := dbCore.BuildUpdateQuery(c, tx, u.TableName, data, where, whereData, errWhere)
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +106,7 @@ func (u *MenuItem) UpdateMenuItem(c *gin.Context, tx *sql.Tx,
 func (u *MenuItem) DeleteMenuItem(c *gin.Context, tx *sql.Tx,
 	data map[string]string, where string, whereData []string, errWhere string) (error, error) {
 
-	_, err := core.BuildDeleteQuery(c, tx, u.TableName, where, whereData, errWhere)
+	_, err := dbCore.BuildDeleteQuery(c, tx, u.TableName, where, whereData, errWhere)
 	if err != nil {
 		return nil, err
 	}

@@ -2,8 +2,8 @@ package model
 
 import (
 	"database/sql"
-	"gin_starter/model/core"
-	"gin_starter/util"
+	"gin_starter/model/dbCore"
+	"gin_starter/util/utilCore"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -14,7 +14,7 @@ import (
 // required 필수 / alphanum 알파벳과 숫자만 / min=6 최소 6 / max=32 최대 32 / alphaunicode 공백 없이 영문 또는 한글 / alpha 알파벳만 / email 이메일 / numeric 숫자 형식만 / gt / gte / lt / lte / len=10 정확한 길이 / regexp=^[a-zA-Z0-9]*$ 정규식으로 패턴 / eqfield=PasswordConfirm 다른 필드와 값이 동일한지
 
 type UserInsert struct {
-	core.BaseModel
+	dbCore.BaseModel
 	id               string `db:"u_id"`
 	pass             string `db:"u_pass" validate:"min=6,max=20,required"`
 	name             string `db:"u_name" validate:"max=30,required"`
@@ -23,7 +23,7 @@ type UserInsert struct {
 	TableName        string
 }
 type UserUpdate struct {
-	core.BaseModel
+	dbCore.BaseModel
 	id               string `db:"u_id"`
 	pass             string `db:"u_pass" validate:"omitempty,min=6,max=20"`
 	name             string `db:"u_name" validate:"omitempty,max=30"`
@@ -34,7 +34,7 @@ type UserUpdate struct {
 
 func NewUser() *UserInsert {
 	return &UserInsert{
-		BaseModel: core.NewBaseModel(),
+		BaseModel: dbCore.NewBaseModel(),
 		ValidateConverts: map[string]string{
 			"id":    "아이디",
 			"pass":  "비밀번호",
@@ -46,7 +46,7 @@ func NewUser() *UserInsert {
 }
 func NewUpUser() *UserUpdate {
 	return &UserUpdate{
-		BaseModel: core.NewBaseModel(),
+		BaseModel: dbCore.NewBaseModel(),
 		ValidateConverts: map[string]string{
 			"id":    "아이디",
 			"pass":  "비밀번호",
@@ -67,10 +67,10 @@ func (u *UserInsert) Insert(c *gin.Context, tx *sql.Tx,
 		"u_name":  &u.name,
 		"u_email": &u.email,
 	}
-	util.AssignStringFields(data, fieldMap)
+	utilCore.AssignStringFields(data, fieldMap)
 
-	err := core.ValidateModel(u)
-	if core.HandleValidationError(c, tx, err, u.ValidateConverts) {
+	err := dbCore.ValidateModel(u)
+	if dbCore.HandleValidationError(c, tx, err, u.ValidateConverts) {
 		return "0", err, nil
 	}
 	// 유효성 검사 종료
@@ -78,12 +78,12 @@ func (u *UserInsert) Insert(c *gin.Context, tx *sql.Tx,
 	pass := data["u_pass"]
 	hashedPass, err := bcrypt.GenerateFromPassword([]byte(pass), bcrypt.DefaultCost)
 	if err != nil {
-		util.EndResponse(c, http.StatusBadRequest, gin.H{"errCode": 0}, "fn user/Insert")
+		utilCore.EndResponse(c, http.StatusBadRequest, gin.H{"errCode": 0}, "fn user/Insert")
 		return "0", err, nil
 	}
 	data["u_pass"] = string(hashedPass)
 
-	insertedID, err := core.BuildInsertQuery(c, tx, u.TableName, data, errWhere)
+	insertedID, err := dbCore.BuildInsertQuery(c, tx, u.TableName, data, errWhere)
 	if err != nil {
 		return "0", nil, err
 	}
@@ -102,15 +102,15 @@ func (u *UserUpdate) Update(c *gin.Context, tx *sql.Tx,
 		"u_name":  &u.name,
 		"u_email": &u.email,
 	}
-	util.AssignStringFields(data, fieldMap)
+	utilCore.AssignStringFields(data, fieldMap)
 
-	err := core.ValidateModel(u)
-	if core.HandleValidationError(c, tx, err, u.ValidateConverts) {
+	err := dbCore.ValidateModel(u)
+	if dbCore.HandleValidationError(c, tx, err, u.ValidateConverts) {
 		return err, nil
 	}
 	// 유효성 검사 종료
 
-	if !util.EmptyString(data["u_pass"]) {
+	if !utilCore.EmptyString(data["u_pass"]) {
 		pass := data["u_pass"]
 		hashedPass, err := bcrypt.GenerateFromPassword([]byte(pass), bcrypt.DefaultCost)
 		if err != nil {
@@ -122,7 +122,7 @@ func (u *UserUpdate) Update(c *gin.Context, tx *sql.Tx,
 	// 변경되면 안되는 데이터 제외
 	delete(data, "u_id")
 
-	_, err = core.BuildUpdateQuery(c, tx, u.TableName, data, where, whereData, errWhere)
+	_, err = dbCore.BuildUpdateQuery(c, tx, u.TableName, data, where, whereData, errWhere)
 	if err != nil {
 		return nil, err
 	}

@@ -1,9 +1,9 @@
 package adm
 
 import (
-	"gin_starter/model/core"
-	"gin_starter/util"
-	"gin_starter/util/pageUtil"
+	"gin_starter/model/dbCore"
+	"gin_starter/util/utilCore"
+	"gin_starter/util/utilCore/pageUtil"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -39,8 +39,8 @@ func SetupAdminRoutes(rg *gin.RouterGroup) {
 	rg.GET("/chat", func(c *gin.Context) {
 		pageUtil.RenderPageCheckLogin(c, "", 0)
 
-		userId, _ := util.GetContextVal(c, "user_id")
-		UserName, _ := util.GetContextVal(c, "user_name")
+		userId, _ := utilCore.GetContextVal(c, "user_id")
+		UserName, _ := utilCore.GetContextVal(c, "user_name")
 
 		pageUtil.RenderPage(c, "chat", gin.H{
 			"UserName": UserName,
@@ -59,9 +59,9 @@ func SetupAdminRoutes(rg *gin.RouterGroup) {
 		adminGroup.GET("/logout", func(c *gin.Context) {
 
 			pageUtil.RenderPageCheckLogin(c, "", 0)
-			userId, _ := util.GetContextVal(c, "user_id")
+			userId, _ := utilCore.GetContextVal(c, "user_id")
 
-			_, _ = core.BuildUpdateQuery(c, nil, "_user", map[string]string{"u_re_token": ""}, "u_id = ?", []string{userId}, "page adm/logout")
+			_, _ = dbCore.BuildUpdateQuery(c, nil, "_user", map[string]string{"u_re_token": ""}, "u_id = ?", []string{userId}, "page adm/logout")
 			pageUtil.SetCookie(c, "acc_token", "", 0)
 			pageUtil.SetCookie(c, "ref_token", "", 0)
 			c.Redirect(http.StatusFound, "/adm/manage/login")
