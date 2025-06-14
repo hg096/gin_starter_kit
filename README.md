@@ -32,3 +32,14 @@ swag init
 
 # 스웨거가 보이지 않을때 && 갱신
 swag init -g routes/routes.go
+
+# 프로젝트를 복사해서 시작할 경우
+git init
+git remote add origin 프로젝트깃주소
+git remote add starter-kit https://github.com/hg096/gin_starter_kit.git
+
+git fetch starter-kit
+git merge starter-kit/main --allow-unrelated-histories
+git commit -m "Merge starter-kit into project"
+git push origin main
+git fetch origin
