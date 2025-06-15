@@ -84,7 +84,8 @@ func RenderPageCheckLogin(c *gin.Context, userType string, lv int8) []map[string
 	if err != nil {
 		newAT, newRT, errMsg := auth.RefreshHandler(c, map[string]string{"refresh_token": refToken})
 		if !utilCore.EmptyString(errMsg) {
-			utilCore.EndResponse(c, http.StatusBadRequest, gin.H{}, errMsg)
+			c.Redirect(http.StatusFound, "/adm/manage/login")
+			c.Abort()
 			return nil
 		}
 		claims, _ = auth.ValidateToken(newAT, auth.AccessSecret, auth.TokenSecret)
