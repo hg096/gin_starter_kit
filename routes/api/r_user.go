@@ -31,9 +31,9 @@ func SetupUserRoutes(rg *gin.RouterGroup) {
 
 		userGroup.POST("/refresh", func(c *gin.Context) { refreshUserToken(c) })
 
-		// userGroup.Use(auth.JWTAuthMiddleware("U", 0))
+		// userGroup.Use(auth.ApiCheckLogin("U", 0))
 		// {
-		userGroup.GET("/profile", auth.JWTAuthMiddleware("U", 0), func(c *gin.Context) { apiUserProfile(c) })
+		userGroup.GET("/profile", auth.ApiCheckLogin("U", 0), func(c *gin.Context) { apiUserProfile(c) })
 		// }
 
 		// userGroup.GET("/:id", func(c *gin.Context) {

@@ -48,7 +48,7 @@ func SetupRoutes(r *gin.Engine) {
 
 		out.SetupOutRoutes(apiGroup)
 
-		// apiGroup.Use(auth.JWTAuthMiddleware("U", 0))
+		// apiGroup.Use(auth.ApiCheckLogin("U", 0))
 		// {
 
 		// }

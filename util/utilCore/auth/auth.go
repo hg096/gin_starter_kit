@@ -268,24 +268,24 @@ func RefreshHandler(c *gin.Context, postData map[string]string) (accessToken str
 }
 
 // 미들웨어 엑세스 토큰 검증 - 사용자 타입, 레벨
-func JWTAuthMiddleware(userType string, lv int8) gin.HandlerFunc {
+func ApiCheckLogin(userType string, lv int8) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		h := c.GetHeader("Authorization")
 		parts := strings.SplitN(h, " ", 2)
 		if len(parts) != 2 || parts[0] != "Bearer" {
-			utilCore.EndResponse(c, http.StatusBadRequest, gin.H{"TOKEN": "N"}, "fn auth/JWTAuthMiddleware")
+			utilCore.EndResponse(c, http.StatusBadRequest, gin.H{"TOKEN": "N"}, "fn auth/ApiCheckLogin")
 			return
 		}
 
 		claims, err := ValidateToken(parts[1], AccessSecret, TokenSecret)
 		if err != nil {
-			utilCore.EndResponse(c, http.StatusBadRequest, gin.H{"TOKEN": "R"}, "fn auth/JWTAuthMiddleware-ValidateToken")
+			utilCore.EndResponse(c, http.StatusBadRequest, gin.H{"TOKEN": "R"}, "fn auth/ApiCheckLogin-ValidateToken")
 			return
 		}
 
-		result, err := dbCore.BuildSelectQuery(c, nil, "select u_auth_type, u_auth_level from _user where u_id = ? ", []string{claims.JWTUserID}, "JWTAuthMiddleware.err")
+		result, err := dbCore.BuildSelectQuery(c, nil, "select u_auth_type, u_auth_level from _user where u_id = ? ", []string{claims.JWTUserID}, "ApiCheckLogin.err")
 		if err != nil {
-			utilCore.EndResponse(c, http.StatusBadRequest, gin.H{}, "fn auth/JWTAuthMiddleware-BuildSelectQuery")
+			utilCore.EndResponse(c, http.StatusBadRequest, gin.H{}, "fn auth/ApiCheckLogin-BuildSelectQuery")
 			return
 		}
 
@@ -294,7 +294,7 @@ func JWTAuthMiddleware(userType string, lv int8) gin.HandlerFunc {
 			// 만약에 타입이 두가지 이상 들어가야할때
 			index := strings.Index(userType, result[0]["u_auth_type"])
 			if index < 0 {
-				utilCore.EndResponse(c, http.StatusBadRequest, gin.H{}, "fn auth/JWTAuthMiddleware-type")
+				utilCore.EndResponse(c, http.StatusBadRequest, gin.H{}, "fn auth/ApiCheckLogin-type")
 			}
 			return
 		}
@@ -303,7 +303,7 @@ func JWTAuthMiddleware(userType string, lv int8) gin.HandlerFunc {
 		if lv > 0 {
 			u_auth_level, _ := utilCore.StringToNumeric[int8](result[0]["u_auth_level"])
 			if lv > u_auth_level {
-				utilCore.EndResponse(c, http.StatusBadRequest, gin.H{}, "fn auth/JWTAuthMiddleware-level")
+				utilCore.EndResponse(c, http.StatusBadRequest, gin.H{}, "fn auth/ApiCheckLogin-level")
 				return
 			}
 		}
