@@ -12,6 +12,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"golang.org/x/crypto/bcrypt"
 )
 
 func SetupAdminApiRoutes(rg *gin.RouterGroup) {
@@ -117,6 +118,21 @@ func apiUserLogIn(c *gin.Context) {
 		"user_id":   {"u_id", ""},
 		"user_pass": {"u_pass", ""},
 	})
+
+	userRows, err := dbCore.BuildSelectQuery(c, nil,
+		"SELECT u_pass FROM _user WHERE u_id = ? LIMIT 1", []string{data["u_id"]}, "apiUserLogIn-getPass")
+
+	if err != nil || len(userRows) == 0 {
+		utilCore.EndResponse(c, http.StatusUnauthorized, gin.H{}, "rest /user/login getUser")
+		return
+	}
+	storedHash := userRows[0]["u_pass"]
+
+	err = bcrypt.CompareHashAndPassword([]byte(storedHash), []byte(data["u_pass"]))
+	if err != nil {
+		utilCore.EndResponse(c, http.StatusUnauthorized, gin.H{}, "rest /user/login pass")
+		return
+	}
 
 	at, rt, err := auth.GenerateTokens(data["u_id"], "")
 	if err != nil {
