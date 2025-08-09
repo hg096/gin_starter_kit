@@ -196,7 +196,7 @@ func apiAdmMenusGroupEdit(c *gin.Context) {
 		{InputKey: "id", OutputKey: "id", Label: "ID",
 			Allow: utilCore.AllowNumber, Required: true, Default: "0", TrimSpace: true},
 	}
-	getData, ok := utilCore.BindAutoAndRespond(c, rulesGet, "apiAdmMenusGroupEdit BindAutoAndRespond")
+	getData, ok := utilCore.BindGetAndRespond(c, rulesGet, "apiAdmMenusGroupEdit BindAutoAndRespond")
 	if !ok {
 		return
 	}
@@ -207,7 +207,7 @@ func apiAdmMenusGroupEdit(c *gin.Context) {
 		{InputKey: "Order", OutputKey: "mg_order", Label: "정렬",
 			Allow: utilCore.AllowNumber, Required: true, Min: 1, Max: 99, TrimSpace: true},
 	}
-	postData, ok := utilCore.BindAutoAndRespond(c, rulesPost, "apiAdmMenusGroupEdit BindAutoAndRespond")
+	postData, ok := utilCore.BindPostAndRespond(c, rulesPost, "apiAdmMenusGroupEdit BindAutoAndRespond")
 	if !ok {
 		return
 	}
@@ -300,7 +300,7 @@ func apiAdmMenusItemEdit(c *gin.Context) {
 		{InputKey: "id", OutputKey: "id", Label: "ID",
 			Allow: utilCore.AllowNumber, Required: true, Default: "0", TrimSpace: true},
 	}
-	getData, ok := utilCore.BindAutoAndRespond(c, rulesGet, "apiAdmMenusItemEdit BindAutoAndRespond")
+	getData, ok := utilCore.BindGetAndRespond(c, rulesGet, "apiAdmMenusItemEdit BindAutoAndRespond")
 	if !ok {
 		return
 	}
@@ -315,7 +315,7 @@ func apiAdmMenusItemEdit(c *gin.Context) {
 		{InputKey: "Role", OutputKey: "mi_roles", Label: "권한",
 			Allow: utilCore.AllowSafeText, Required: true, TrimSpace: true},
 	}
-	postData, ok := utilCore.BindAutoAndRespond(c, rulesPost, "apiAdmMenusItemEdit BindAutoAndRespond")
+	postData, ok := utilCore.BindPostAndRespond(c, rulesPost, "apiAdmMenusItemEdit BindAutoAndRespond")
 	if !ok {
 		return
 	}
@@ -439,7 +439,7 @@ func apiAdmUserEdit(c *gin.Context) {
 		{InputKey: "id", OutputKey: "id", Label: "ID",
 			Allow: utilCore.AllowNumber, Required: true, Default: "0", TrimSpace: true},
 	}
-	getData, ok := utilCore.BindAutoAndRespond(c, rulesGet, "apiAdmUserEdit BindAutoAndRespond")
+	getData, ok := utilCore.BindGetAndRespond(c, rulesGet, "apiAdmUserEdit BindAutoAndRespond")
 	if !ok {
 		return
 	}
@@ -457,7 +457,7 @@ func apiAdmUserEdit(c *gin.Context) {
 			Allow: utilCore.AllowEnglish, Required: true, Default: "AG", TrimSpace: true},
 	}
 
-	postData, ok := utilCore.BindAutoAndRespond(c, rules, "apiAdmUserEdit BindAutoAndRespond")
+	postData, ok := utilCore.BindPostAndRespond(c, rules, "apiAdmUserEdit BindAutoAndRespond")
 	if !ok {
 		return
 	}
