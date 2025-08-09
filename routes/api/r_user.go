@@ -59,14 +59,21 @@ func apiUser(c *gin.Context) {
 // 가입
 func apiUserMake(c *gin.Context) {
 
-	user := model.NewUser()
+	rules := []utilCore.InputRule{
+		{InputKey: "user_id", OutputKey: "u_id", Label: "아이디",
+			Allow: utilCore.AllowKorEngNum, Required: true, MinLen: 3, MaxLen: 20, TrimSpace: true},
+		{InputKey: "user_pass", OutputKey: "u_pass", Label: "비밀번호",
+			Allow: utilCore.AllowKorEngNumSp, Required: true, MinLen: 1, MaxLen: 50, TrimSpace: true},
+		{InputKey: "user_name", OutputKey: "u_name", Label: "이름",
+			Allow: utilCore.AllowKorean, Required: true, MinLen: 2, MaxLen: 10, TrimSpace: true},
+		{InputKey: "user_email", OutputKey: "u_email", Label: "이메일",
+			Allow: utilCore.AllowEmailLike, Required: true, MinLen: 5, MaxLen: 100, TrimSpace: true},
+	}
 
-	data := utilCore.PostFields(c, map[string][2]string{
-		"user_id":    {"u_id", ""},
-		"user_pass":  {"u_pass", ""},
-		"user_name":  {"u_name", ""},
-		"user_email": {"u_email", ""},
-	})
+	data, ok := utilCore.BindAutoAndRespond(c, rules, "apiUserMake BindAutoAndRespond")
+	if !ok {
+		return
+	}
 
 	data["u_auth_type"] = "U"
 
@@ -75,6 +82,8 @@ func apiUserMake(c *gin.Context) {
 	if err != nil {
 		return
 	}
+
+	user := model.NewUser()
 
 	insertedID, valErr, sqlErr := user.Insert(c, tx, data, "api/user/make")
 	if valErr != nil || sqlErr != nil {
@@ -95,14 +104,23 @@ func apiUserMake(c *gin.Context) {
 // 수정
 func apiUserMakeUp(c *gin.Context) {
 
-	user := model.NewUpUser()
+	rules := []utilCore.InputRule{
+		{InputKey: "user_id", OutputKey: "u_id", Label: "아이디",
+			Allow: utilCore.AllowKorEngNum, Required: true, MinLen: 3, MaxLen: 20, TrimSpace: true},
+		// {InputKey: "user_pass", OutputKey: "u_pass", Label: "비밀번호",
+		// 	Allow: utilCore.AllowKorEngNumSp, Required: true, MinLen: 1, MaxLen: 50, TrimSpace: true},
+		// {InputKey: "user_name", OutputKey: "u_name", Label: "이름",
+		// 	Allow: utilCore.AllowKorean, Required: true, MinLen: 2, MaxLen: 10, TrimSpace: true},
+		{InputKey: "user_email", OutputKey: "u_email", Label: "이메일",
+			Allow: utilCore.AllowEmailLike, Required: true, MinLen: 5, MaxLen: 100, TrimSpace: true},
+	}
 
-	data := utilCore.PostFields(c, map[string][2]string{
-		"user_id": {"u_id", ""},
-		// "user_pass":  {"u_pass", ""},
-		// "user_name":  {"u_name", ""},
-		"user_email": {"u_email", ""},
-	})
+	data, ok := utilCore.BindAutoAndRespond(c, rules, "apiUserMakeUp BindAutoAndRespond")
+	if !ok {
+		return
+	}
+
+	user := model.NewUpUser()
 
 	valErr, sqlErr := user.Update(c, nil, data, "u_id = ?", []string{data["u_id"]}, "api/user/makeUp")
 	if valErr != nil || sqlErr != nil {
@@ -118,10 +136,17 @@ func apiUserMakeUp(c *gin.Context) {
 // 로그인
 func apiUserLogIn(c *gin.Context) {
 
-	data := utilCore.PostFields(c, map[string][2]string{
-		"user_id":   {"u_id", ""},
-		"user_pass": {"u_pass", ""},
-	})
+	rules := []utilCore.InputRule{
+		{InputKey: "user_id", OutputKey: "u_id", Label: "아이디",
+			Allow: utilCore.AllowKorEngNum, Required: true, MinLen: 3, MaxLen: 20, TrimSpace: true},
+		{InputKey: "user_pass", OutputKey: "u_pass", Label: "비밀번호",
+			Allow: utilCore.AllowKorEngNumSp, Required: true, MinLen: 1, MaxLen: 50, TrimSpace: true},
+	}
+
+	data, ok := utilCore.BindAutoAndRespond(c, rules, "apiUserLogIn BindAutoAndRespond")
+	if !ok {
+		return
+	}
 
 	userRows, err := dbCore.BuildSelectQuery(c, nil,
 		"SELECT u_pass FROM _user WHERE u_id = ? LIMIT 1", []string{data["u_id"]}, "apiUserLogIn-getPass")
@@ -167,9 +192,16 @@ func apiUserLogOut(c *gin.Context) {
 // 토큰 재발급
 func refreshUserToken(c *gin.Context) {
 
-	postData := utilCore.PostFields(c, map[string][2]string{
-		"refresh_token": {"refresh_token", ""},
-	})
+	rules := []utilCore.InputRule{
+		{InputKey: "refresh_token", OutputKey: "refresh_token", Label: "토큰",
+			Allow: utilCore.AllowKorEngNum, Required: true, MinLen: 3, MaxLen: 500, TrimSpace: true},
+	}
+
+	postData, ok := utilCore.BindAutoAndRespond(c, rules, "apiUserLogOut BindAutoAndRespond")
+	if !ok {
+		return
+	}
+
 	newAT, newRT, errMsg := auth.RefreshHandler(c, postData)
 	if !utilCore.EmptyString(errMsg) {
 		utilCore.EndResponse(c, http.StatusBadRequest, gin.H{}, errMsg)
@@ -183,8 +215,17 @@ func refreshUserToken(c *gin.Context) {
 
 // 프로필 조회
 func apiUserProfile(c *gin.Context) {
-	uid := utilCore.GetBindField(c, "user_id", "")
+
+	rulesGet := []utilCore.InputRule{
+		{InputKey: "user_id", OutputKey: "user_id", Label: "ID",
+			Allow: utilCore.AllowNumber, Required: true, Default: "0", TrimSpace: true},
+	}
+	getData, ok := utilCore.BindAutoAndRespond(c, rulesGet, "apiUserProfile BindAutoAndRespond")
+	if !ok {
+		return
+	}
+
 	userID := c.MustGet("user_id").(string)
 
-	utilCore.EndResponse(c, 200, gin.H{"user": uid, "userID": userID}, "rest /user/profile")
+	utilCore.EndResponse(c, 200, gin.H{"user": getData["user_id"], "userID": userID}, "rest /user/profile")
 }

@@ -55,17 +55,25 @@ func SetupAdminApiRoutes(rg *gin.RouterGroup) {
 // 가입
 func apiUserMake(c *gin.Context) {
 
-	user := model.NewUser()
+	rules := []utilCore.InputRule{
+		{InputKey: "user_id", OutputKey: "u_id", Label: "아이디",
+			Allow: utilCore.AllowKorEngNum, Required: true, MinLen: 3, MaxLen: 20, TrimSpace: true},
+		{InputKey: "user_pass", OutputKey: "u_pass", Label: "비밀번호",
+			Allow: utilCore.AllowKorEngNumSp, Required: true, MinLen: 1, MaxLen: 50, TrimSpace: true},
+		{InputKey: "user_name", OutputKey: "u_name", Label: "이름",
+			Allow: utilCore.AllowKorean, Required: true, MinLen: 2, MaxLen: 10, TrimSpace: true},
+		{InputKey: "user_email", OutputKey: "u_email", Label: "이메일",
+			Allow: utilCore.AllowEmailLike, Required: true, MinLen: 5, MaxLen: 100, TrimSpace: true},
+	}
 
-	data := utilCore.PostFields(c, map[string][2]string{
-		"user_id":    {"u_id", ""},
-		"user_pass":  {"u_pass", ""},
-		"user_name":  {"u_name", ""},
-		"user_email": {"u_email", ""},
-	})
+	data, ok := utilCore.BindAutoAndRespond(c, rules, "apiUserMake BindAutoAndRespond")
+	if !ok {
+		return
+	}
 
 	data["u_auth_type"] = "AG"
 
+	user := model.NewUser()
 	// 트랜젝션 예시 불필요할시 제거
 	tx, err := dbCore.BeginTransaction(c)
 	if err != nil {
@@ -91,15 +99,23 @@ func apiUserMake(c *gin.Context) {
 // 수정
 func apiUserMakeUp(c *gin.Context) {
 
+	rules := []utilCore.InputRule{
+		{InputKey: "user_id", OutputKey: "u_id", Label: "아이디",
+			Allow: utilCore.AllowKorEngNum, Required: true, MinLen: 3, MaxLen: 20, TrimSpace: true},
+		// {InputKey: "user_pass", OutputKey: "u_pass", Label: "비밀번호",
+		// 	Allow: utilCore.AllowKorEngNumSp, Required: true, MinLen: 1, MaxLen: 50, TrimSpace: true},
+		// {InputKey: "user_name", OutputKey: "u_name", Label: "이름",
+		// 	Allow: utilCore.AllowKorean, Required: true, MinLen: 2, MaxLen: 10, TrimSpace: true},
+		{InputKey: "user_email", OutputKey: "u_email", Label: "이메일",
+			Allow: utilCore.AllowEmailLike, Required: true, MinLen: 5, MaxLen: 100, TrimSpace: true},
+	}
+
+	data, ok := utilCore.BindAutoAndRespond(c, rules, "apiUserMakeUp BindAutoAndRespond")
+	if !ok {
+		return
+	}
+
 	user := model.NewUpUser()
-
-	data := utilCore.PostFields(c, map[string][2]string{
-		"user_id": {"u_id", ""},
-		// "user_pass":  {"u_pass", ""},
-		// "user_name":  {"u_name", ""},
-		"user_email": {"u_email", ""},
-	})
-
 	valErr, sqlErr := user.Update(c, nil, data, "u_id = ?", []string{data["u_id"]}, "api/user/makeUp")
 	if valErr != nil || sqlErr != nil {
 		log.Printf("User Insert 에러: %v", valErr)
@@ -114,10 +130,17 @@ func apiUserMakeUp(c *gin.Context) {
 // 로그인
 func apiUserLogIn(c *gin.Context) {
 
-	data := utilCore.PostFields(c, map[string][2]string{
-		"user_id":   {"u_id", ""},
-		"user_pass": {"u_pass", ""},
-	})
+	rules := []utilCore.InputRule{
+		{InputKey: "user_id", OutputKey: "u_id", Label: "아이디",
+			Allow: utilCore.AllowKorEngNum, Required: true, MinLen: 3, MaxLen: 20, TrimSpace: true},
+		{InputKey: "user_pass", OutputKey: "u_pass", Label: "비밀번호",
+			Allow: utilCore.AllowKorEngNumSp, Required: true, MinLen: 1, MaxLen: 50, TrimSpace: true},
+	}
+
+	data, ok := utilCore.BindAutoAndRespond(c, rules, "apiUserLogIn BindAutoAndRespond")
+	if !ok {
+		return
+	}
 
 	userRows, err := dbCore.BuildSelectQuery(c, nil,
 		"SELECT u_pass FROM _user WHERE u_id = ? LIMIT 1", []string{data["u_id"]}, "apiUserLogIn-getPass")
@@ -169,14 +192,25 @@ func apiAdmMenusGroupEdit(c *gin.Context) {
 
 	pageUtil.RenderPageCheckLogin(c, "A", 0)
 
-	getData := utilCore.GetFields(c, map[string][2]string{
-		"id": {"id", "0"},
-	})
+	rulesGet := []utilCore.InputRule{
+		{InputKey: "id", OutputKey: "id", Label: "ID",
+			Allow: utilCore.AllowNumber, Required: true, Default: "0", TrimSpace: true},
+	}
+	getData, ok := utilCore.BindAutoAndRespond(c, rulesGet, "apiAdmMenusGroupEdit BindAutoAndRespond")
+	if !ok {
+		return
+	}
 
-	postData := utilCore.PostFields(c, map[string][2]string{
-		"Label": {"mg_label", ""},
-		"Order": {"mg_order", "1"},
-	})
+	rulesPost := []utilCore.InputRule{
+		{InputKey: "Label", OutputKey: "mg_label", Label: "이름",
+			Allow: utilCore.AllowKorEngNum, Required: true, MinLen: 1, MaxLen: 20, TrimSpace: true},
+		{InputKey: "Order", OutputKey: "mg_order", Label: "정렬",
+			Allow: utilCore.AllowNumber, Required: true, Min: 1, Max: 99, TrimSpace: true},
+	}
+	postData, ok := utilCore.BindAutoAndRespond(c, rulesPost, "apiAdmMenusGroupEdit BindAutoAndRespond")
+	if !ok {
+		return
+	}
 
 	dbCore.BuildUpdateQuery(c, nil, "_menu_groups", postData, "mg_idx = ?", []string{getData["id"]}, "apiAdmMenusGroupEdit")
 
@@ -188,9 +222,14 @@ func apiAdmMenusGroupDel(c *gin.Context) {
 
 	pageUtil.RenderPageCheckLogin(c, "A", 0)
 
-	getData := utilCore.GetFields(c, map[string][2]string{
-		"id": {"id", "0"},
-	})
+	rulesGet := []utilCore.InputRule{
+		{InputKey: "id", OutputKey: "id", Label: "ID",
+			Allow: utilCore.AllowNumber, Required: true, Default: "0", TrimSpace: true},
+	}
+	getData, ok := utilCore.BindAutoAndRespond(c, rulesGet, "apiAdmMenusGroupDel BindAutoAndRespond")
+	if !ok {
+		return
+	}
 
 	dbCore.BuildDeleteQuery(c, nil, "_menu_groups", "mg_idx = ?", []string{getData["id"]}, "apiAdmMenusGroupDel")
 	dbCore.BuildDeleteQuery(c, nil, "_menu_items", "mi_group_id = ?", []string{getData["id"]}, "apiAdmMenusGroupDel")
@@ -203,13 +242,22 @@ func apiAdmMenusItemAdd(c *gin.Context) {
 
 	pageUtil.RenderPageCheckLogin(c, "A", 0)
 
-	postData := utilCore.PostFields(c, map[string][2]string{
-		"Label":    {"mi_label", ""},
-		"Order":    {"mi_order", "1"},
-		"Href":     {"mi_href", ""},
-		"Role":     {"mi_roles", ""},
-		"group_id": {"mi_group_id", "0"},
-	})
+	rulesPost := []utilCore.InputRule{
+		{InputKey: "Label", OutputKey: "mi_label", Label: "이름",
+			Allow: utilCore.AllowKorEngNum, Required: true, MinLen: 1, MaxLen: 20, TrimSpace: true},
+		{InputKey: "Order", OutputKey: "mi_order", Label: "정렬",
+			Allow: utilCore.AllowNumber, Required: true, Min: 1, Max: 99, TrimSpace: true},
+		{InputKey: "Href", OutputKey: "mi_href", Label: "주소",
+			Allow: utilCore.AllowKorEngNum, Required: true, TrimSpace: true},
+		{InputKey: "Role", OutputKey: "mi_roles", Label: "권한",
+			Allow: utilCore.AllowSafeText, Required: true, TrimSpace: true},
+		{InputKey: "group_id", OutputKey: "mi_group_id", Label: "그룹 ID",
+			Allow: utilCore.AllowNumber, Required: true, Min: 1, TrimSpace: true},
+	}
+	postData, ok := utilCore.BindAutoAndRespond(c, rulesPost, "apiAdmMenusItemAdd BindAutoAndRespond")
+	if !ok {
+		return
+	}
 
 	tx, err := dbCore.BeginTransaction(c)
 	if err != nil {
@@ -218,10 +266,17 @@ func apiAdmMenusItemAdd(c *gin.Context) {
 	}
 
 	if postData["mi_group_id"] == "0" {
-		postData2 := utilCore.PostFields(c, map[string][2]string{
-			"LabelG": {"mg_label", ""},
-			"OrderG": {"mg_order", "1"},
-		})
+		rulesPost := []utilCore.InputRule{
+			{InputKey: "LabelG", OutputKey: "mg_label", Label: "이름",
+				Allow: utilCore.AllowKorEngNum, Required: true, MinLen: 1, MaxLen: 20, TrimSpace: true},
+			{InputKey: "OrderG", OutputKey: "mg_order", Label: "정렬",
+				Allow: utilCore.AllowNumber, Required: true, Min: 1, Max: 99, TrimSpace: true},
+		}
+		postData2, ok := utilCore.BindAutoAndRespond(c, rulesPost, "apiAdmMenusItemAdd BindAutoAndRespond")
+		if !ok {
+			return
+		}
+
 		insertKey, _ := dbCore.BuildInsertQuery(c, tx, "_menu_groups", postData2, "apiAdmMenusItemAdd")
 		postData["mi_group_id"] = insertKey
 	}
@@ -241,16 +296,29 @@ func apiAdmMenusItemEdit(c *gin.Context) {
 
 	pageUtil.RenderPageCheckLogin(c, "A", 0)
 
-	getData := utilCore.GetFields(c, map[string][2]string{
-		"id": {"id", "0"},
-	})
+	rulesGet := []utilCore.InputRule{
+		{InputKey: "id", OutputKey: "id", Label: "ID",
+			Allow: utilCore.AllowNumber, Required: true, Default: "0", TrimSpace: true},
+	}
+	getData, ok := utilCore.BindAutoAndRespond(c, rulesGet, "apiAdmMenusItemEdit BindAutoAndRespond")
+	if !ok {
+		return
+	}
 
-	postData := utilCore.PostFields(c, map[string][2]string{
-		"Label": {"mi_label", ""},
-		"Order": {"mi_order", "1"},
-		"Href":  {"mi_href", ""},
-		"Role":  {"mi_roles", ""},
-	})
+	rulesPost := []utilCore.InputRule{
+		{InputKey: "Label", OutputKey: "mi_label", Label: "이름",
+			Allow: utilCore.AllowKorEngNum, Required: true, MinLen: 1, MaxLen: 20, TrimSpace: true},
+		{InputKey: "Order", OutputKey: "mi_order", Label: "정렬",
+			Allow: utilCore.AllowNumber, Required: true, Min: 1, Max: 99, TrimSpace: true},
+		{InputKey: "Href", OutputKey: "mi_href", Label: "주소",
+			Allow: utilCore.AllowKorEngNum, Required: true, TrimSpace: true},
+		{InputKey: "Role", OutputKey: "mi_roles", Label: "권한",
+			Allow: utilCore.AllowSafeText, Required: true, TrimSpace: true},
+	}
+	postData, ok := utilCore.BindAutoAndRespond(c, rulesPost, "apiAdmMenusItemEdit BindAutoAndRespond")
+	if !ok {
+		return
+	}
 
 	dbCore.BuildUpdateQuery(c, nil, "_menu_items", postData, "mi_idx = ?", []string{getData["id"]}, "apiAdmMenusItemEdit")
 
@@ -262,9 +330,14 @@ func apiAdmMenusItemDel(c *gin.Context) {
 
 	pageUtil.RenderPageCheckLogin(c, "A", 0)
 
-	getData := utilCore.GetFields(c, map[string][2]string{
-		"id": {"id", "0"},
-	})
+	rulesGet := []utilCore.InputRule{
+		{InputKey: "id", OutputKey: "id", Label: "ID",
+			Allow: utilCore.AllowNumber, Required: true, Default: "0", TrimSpace: true},
+	}
+	getData, ok := utilCore.BindAutoAndRespond(c, rulesGet, "apiAdmMenusItemDel BindAutoAndRespond")
+	if !ok {
+		return
+	}
 
 	dataMi, err := dbCore.BuildSelectQuery(c, nil, `
 			SELECT count(mi2.mi_idx) AS CNT, mg_idx
@@ -318,15 +391,25 @@ func apiAdmUserAdd(c *gin.Context) {
 
 	pageUtil.RenderPageCheckLogin(c, "A", 0)
 
-	user := model.NewUser()
-	data := utilCore.PostFields(c, map[string][2]string{
-		"user_id":    {"u_id", ""},
-		"user_pass":  {"u_pass", ""},
-		"user_name":  {"u_name", ""},
-		"user_email": {"u_email", ""},
-		"user_auth":  {"u_auth_type", "AG"},
-	})
+	rules := []utilCore.InputRule{
+		{InputKey: "user_id", OutputKey: "u_id", Label: "아이디",
+			Allow: utilCore.AllowKorEngNum, Required: true, MinLen: 3, MaxLen: 20, TrimSpace: true},
+		{InputKey: "user_pass", OutputKey: "u_pass", Label: "비밀번호",
+			Allow: utilCore.AllowKorEngNumSp, Required: true, MinLen: 1, MaxLen: 50, TrimSpace: true},
+		{InputKey: "user_name", OutputKey: "u_name", Label: "이름",
+			Allow: utilCore.AllowKorean, Required: true, MinLen: 2, MaxLen: 10, TrimSpace: true},
+		{InputKey: "user_email", OutputKey: "u_email", Label: "이메일",
+			Allow: utilCore.AllowEmailLike, Required: true, MinLen: 5, MaxLen: 100, TrimSpace: true},
+		{InputKey: "user_auth", OutputKey: "u_auth_type", Label: "권한",
+			Allow: utilCore.AllowEnglish, Required: true, Default: "AG", TrimSpace: true},
+	}
 
+	data, ok := utilCore.BindAutoAndRespond(c, rules, "apiAdmUserAdd BindAutoAndRespond")
+	if !ok {
+		return
+	}
+
+	user := model.NewUser()
 	tx, err := dbCore.BeginTransaction(c)
 	if err != nil {
 		utilCore.EndResponse(c, http.StatusBadRequest, gin.H{"data": ""}, "rest apiAdmUserAdd")
@@ -352,15 +435,32 @@ func apiAdmUserEdit(c *gin.Context) {
 
 	pageUtil.RenderPageCheckLogin(c, "A", 0)
 
-	getData := utilCore.GetFields(c, map[string][2]string{
-		"id": {"id", "0"},
-	})
-	postData := utilCore.PostFields(c, map[string][2]string{
-		"user_name":  {"u_name", ""},
-		"user_email": {"u_email", ""},
-		"user_auth":  {"u_auth_type", ""},
-		"user_pass":  {"u_pass", ""},
-	})
+	rulesGet := []utilCore.InputRule{
+		{InputKey: "id", OutputKey: "id", Label: "ID",
+			Allow: utilCore.AllowNumber, Required: true, Default: "0", TrimSpace: true},
+	}
+	getData, ok := utilCore.BindAutoAndRespond(c, rulesGet, "apiAdmUserEdit BindAutoAndRespond")
+	if !ok {
+		return
+	}
+
+	rules := []utilCore.InputRule{
+		// {InputKey: "user_id", OutputKey: "u_id", Label: "아이디",
+		// 	Allow: utilCore.AllowKorEngNum, Required: true, MinLen: 3, MaxLen: 20, TrimSpace: true},
+		{InputKey: "user_pass", OutputKey: "u_pass", Label: "비밀번호",
+			Allow: utilCore.AllowKorEngNumSp, Required: true, MinLen: 1, MaxLen: 50, TrimSpace: true},
+		{InputKey: "user_name", OutputKey: "u_name", Label: "이름",
+			Allow: utilCore.AllowKorean, Required: true, MinLen: 2, MaxLen: 10, TrimSpace: true},
+		{InputKey: "user_email", OutputKey: "u_email", Label: "이메일",
+			Allow: utilCore.AllowEmailLike, Required: true, MinLen: 5, MaxLen: 100, TrimSpace: true},
+		{InputKey: "user_auth", OutputKey: "u_auth_type", Label: "권한",
+			Allow: utilCore.AllowEnglish, Required: true, Default: "AG", TrimSpace: true},
+	}
+
+	postData, ok := utilCore.BindAutoAndRespond(c, rules, "apiAdmUserEdit BindAutoAndRespond")
+	if !ok {
+		return
+	}
 
 	user := model.NewUpUser()
 	valErr, sqlErr := user.Update(c, nil, postData, "u_idx = ?", []string{getData["id"]}, "apiAdmUserEdit")
@@ -377,9 +477,14 @@ func apiAdmUserDel(c *gin.Context) {
 
 	pageUtil.RenderPageCheckLogin(c, "A", 0)
 
-	getData := utilCore.GetFields(c, map[string][2]string{
-		"id": {"id", "0"},
-	})
+	rulesGet := []utilCore.InputRule{
+		{InputKey: "id", OutputKey: "id", Label: "ID",
+			Allow: utilCore.AllowNumber, Required: true, Default: "0", TrimSpace: true},
+	}
+	getData, ok := utilCore.BindAutoAndRespond(c, rulesGet, "apiAdmUserDel BindAutoAndRespond")
+	if !ok {
+		return
+	}
 
 	dbCore.BuildDeleteQuery(c, nil, "_user", "u_idx = ?", []string{getData["id"]}, "apiAdmUserDel")
 

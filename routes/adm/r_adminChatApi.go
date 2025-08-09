@@ -22,9 +22,14 @@ func getChatHistory(c *gin.Context) {
 
 	pageUtil.RenderPageCheckLogin(c, "", 0)
 
-	getData := utilCore.GetFields(c, map[string][2]string{
-		"room": {"room", "0"},
-	})
+	rulesGet := []utilCore.InputRule{
+		{InputKey: "room", OutputKey: "room", Label: "ID",
+			Allow: utilCore.AllowNumber, Required: true, Default: "0", TrimSpace: true},
+	}
+	getData, ok := utilCore.BindAutoAndRespond(c, rulesGet, "getChatHistory BindAutoAndRespond")
+	if !ok {
+		return
+	}
 
 	history, _ := dbCore.BuildSelectQuery(c, nil, `
         SELECT cm_idx id, cm_room_id room_id, cm_sender_id sender_id, cm_receiver_id receiver_id, cm_content content, cm_timestamp timestamp
@@ -39,12 +44,20 @@ func postChatMessage(c *gin.Context) {
 
 	pageUtil.RenderPageCheckLogin(c, "", 0)
 
-	postData := utilCore.PostFields(c, map[string][2]string{
-		"room_id":     {"cm_room_id", ""},
-		"sender_id":   {"cm_sender_id", ""},
-		"receiver_id": {"cm_receiver_id", ""},
-		"content":     {"cm_content", ""},
-	})
+	rules := []utilCore.InputRule{
+		{InputKey: "room_id", OutputKey: "cm_room_id", Label: "방 ID",
+			Allow: utilCore.AllowKorEngNumSp, Required: true, MinLen: 3, MaxLen: 100, TrimSpace: true},
+		{InputKey: "sender_id", OutputKey: "cm_sender_id", Label: "발송자",
+			Allow: utilCore.AllowKorEngNum, Required: true, MinLen: 1, MaxLen: 50, TrimSpace: true},
+		{InputKey: "receiver_id", OutputKey: "cm_receiver_id", Label: "수신자",
+			Allow: utilCore.AllowKorEngNum, Required: true, MinLen: 2, MaxLen: 50, TrimSpace: true},
+		{InputKey: "content", OutputKey: "cm_content", Label: "내용",
+			Allow: utilCore.AllowSafeText, Required: true, MinLen: 1, TrimSpace: true},
+	}
+	postData, ok := utilCore.BindAutoAndRespond(c, rules, "postChatMessage BindAutoAndRespond")
+	if !ok {
+		return
+	}
 
 	if !utilCore.EmptyString(postData["cm_room_id"]) {
 		lastID, _ := dbCore.BuildInsertQuery(c, nil, "_chat_messages", map[string]string{

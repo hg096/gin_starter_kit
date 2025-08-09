@@ -92,20 +92,24 @@ func EndResponse(c *gin.Context, status int, jsonObj gin.H, debug string) {
 	c.AbortWithStatusJSON(status, jsonObj)
 }
 
-// 바디 캐싱
-func cacheJSONBody(c *gin.Context) map[string]interface{} {
-	if b, exists := c.Get("jsonBody"); exists {
-		return b.(map[string]interface{})
+// JSON Body 캐시 유틸
+func cacheJSONBody(c *gin.Context) map[string]any {
+	if v, ok := c.Get("_jsonBody"); ok {
+		if m, ok := v.(map[string]any); ok {
+			return m
+		}
 	}
-	body := make(map[string]interface{})
-	_ = c.ShouldBindJSON(&body)
-	c.Set("jsonBody", body)
-	return body
+	var m map[string]any
+	if err := c.ShouldBindJSON(&m); err == nil && m != nil {
+		c.Set("_jsonBody", m)
+		return m
+	}
+	c.Set("_jsonBody", map[string]any{})
+	return map[string]any{}
 }
 
 // BindField는 POST·PUT·DELETE 요청에서 key에 해당하는 값을 JSON 바디, 폼, 쿼리 순으로 찾아 반환
 func PostBindField(c *gin.Context, key string, defaultValue string) string {
-
 	// JSON 바디 캐시에서 조회
 	for _, ct := range []string{c.GetHeader("Content-Type"), c.GetHeader("Accept")} {
 		if strings.Contains(ct, "application/json") {
@@ -119,12 +123,10 @@ func PostBindField(c *gin.Context, key string, defaultValue string) string {
 			break
 		}
 	}
-
 	// Form 데이터
 	if v := c.PostForm(key); v != "" {
 		return v
 	}
-
 	return defaultValue
 }
 
