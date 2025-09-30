@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>로그인 - 관리자</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <style>
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-10px); }
+            75% { transform: translateX(10px); }
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .animate-slideUp {
+            animation: slideUp 0.5s ease;
+        }
+        .animate-shake {
+            animation: shake 0.5s;
+        }
+        .animate-spin {
+            animation: spin 0.8s linear infinite;
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-indigo-500 to-purple-600 min-h-screen flex justify-center items-center p-5">
+    <div id="app">
+        <div class="bg-white px-8 py-10 md:px-6 md:py-8 rounded-3xl shadow-2xl w-full max-w-md animate-slideUp">
+            <!-- 로고 -->
+            <div class="text-center mb-8">
+                <div class="text-5xl mb-3">🚀</div>
+                <h1 class="text-2xl font-bold text-gray-800 mb-2">Gin Starter</h1>
+                <p class="text-sm text-gray-500">관리자 로그인</p>
+            </div>
+
+            <!-- 알림 -->
+            <div v-if="alert.show" :class="['p-4 rounded-xl mb-5 text-sm animate-shake',
+                     alert.type === 'error' ? 'bg-red-50 text-red-600 border-2 border-red-200' :
+                     'bg-green-50 text-green-600 border-2 border-green-200']">
+                {{ alert.message }}
+            </div>
+
+            <!-- 폼 -->
+            <form @submit.prevent="handleLogin">
+                <div class="mb-5">
+                    <label for="user_id" class="block mb-2 text-gray-800 font-medium text-sm">아이디</label>
+                    <input
+                        type="text"
+                        id="user_id"
+                        v-model="form.user_id"
+                        :disabled="loading"
+                        required
+                        autocomplete="username"
+                        class="w-full px-4 py-4 border-2 border-gray-200 rounded-xl text-base transition bg-gray-50 focus:outline-none focus:border-indigo-500 focus:bg-white disabled:opacity-60"
+                    >
+                </div>
+                <div class="mb-5">
+                    <label for="user_pass" class="block mb-2 text-gray-800 font-medium text-sm">비밀번호</label>
+                    <input
+                        type="password"
+                        id="user_pass"
+                        v-model="form.user_pass"
+                        :disabled="loading"
+                        required
+                        autocomplete="current-password"
+                        class="w-full px-4 py-4 border-2 border-gray-200 rounded-xl text-base transition bg-gray-50 focus:outline-none focus:border-indigo-500 focus:bg-white disabled:opacity-60"
+                    >
+                </div>
+                <button
+                    type="submit"
+                    :disabled="loading"
+                    class="w-full px-4 py-4 bg-gradient-to-br from-indigo-500 to-purple-600 text-white rounded-xl text-base font-semibold cursor-pointer transition active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed mt-3 flex items-center justify-center"
+                >
+                    <span v-if="loading" class="inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2"></span>
+                    {{ loading ? '로그인 중...' : '로그인' }}
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const { createApp } = Vue;
+
+        createApp({
+            data() {
+                return {
+                    form: {
+                        user_id: '',
+                        user_pass: ''
+                    },
+                    loading: false,
+                    alert: {
+                        show: false,
+                        type: 'error',
+                        message: ''
+                    }
+                }
+            },
+            mounted() {
+                // 이미 로그인된 경우
+                if (localStorage.getItem('access_token')) {
+                    window.location.href = '/admin';
+                }
+            },
+            methods: {
+                showAlert(message, type = 'error') {
+                    this.alert = { show: true, type, message };
+                    setTimeout(() => {
+                        this.alert.show = false;
+                    }, 5000);
+                },
+                async handleLogin() {
+                    this.loading = true;
+
+                    try {
+                        const response = await fetch('/api/user/login', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify(this.form)
+                        });
+
+                        const data = await response.json();
+
+                        if (data.success) {
+                            // 관리자 권한 확인
+                            if (data.data.user.auth_type !== 'A') {
+                                this.showAlert('관리자 권한이 필요합니다');
+                                return;
+                            }
+
+                            // 토큰 저장
+                            localStorage.setItem('access_token', data.data.access_token);
+                            localStorage.setItem('refresh_token', data.data.refresh_token);
+                            localStorage.setItem('user_name', data.data.user.name);
+                            localStorage.setItem('user_id', data.data.user.id);
+
+                            this.showAlert('로그인 성공! 이동 중...', 'success');
+
+                            setTimeout(() => {
+                                window.location.href = '/admin';
+                            }, 800);
+                        } else {
+                            this.showAlert(data.error?.message || '로그인에 실패했습니다');
+                        }
+                    } catch (error) {
+                        this.showAlert('서버 오류가 발생했습니다');
+                    } finally {
+                        this.loading = false;
+                    }
+                }
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>

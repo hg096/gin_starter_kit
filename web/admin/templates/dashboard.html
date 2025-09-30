@@ -1,0 +1,203 @@
+{{define "content"}}
+<div id="dashboardApp">
+    <!-- 통계 카드 -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div class="bg-white p-5 rounded-2xl shadow-sm text-center transition active:scale-95 cursor-pointer" @click="goToUsers">
+            <div v-if="!loading" class="text-4xl font-bold bg-gradient-to-br from-indigo-500 to-purple-600 bg-clip-text text-transparent mb-2">
+                {{ stats.total_users }}
+            </div>
+            <div v-else class="h-10 w-16 mx-auto mb-2 bg-gradient-to-r from-gray-200 via-gray-300 to-gray-200 bg-[length:200%_100%] animate-[shimmer_1.5s_infinite] rounded-lg"></div>
+            <div class="text-gray-500 text-sm">전체 사용자</div>
+        </div>
+        <div class="bg-white p-5 rounded-2xl shadow-sm text-center transition active:scale-95">
+            <div v-if="!loading" class="text-4xl font-bold bg-gradient-to-br from-indigo-500 to-purple-600 bg-clip-text text-transparent mb-2">
+                {{ stats.admin_users }}
+            </div>
+            <div v-else class="h-10 w-16 mx-auto mb-2 bg-gradient-to-r from-gray-200 via-gray-300 to-gray-200 bg-[length:200%_100%] animate-[shimmer_1.5s_infinite] rounded-lg"></div>
+            <div class="text-gray-500 text-sm">관리자</div>
+        </div>
+        <div class="bg-white p-5 rounded-2xl shadow-sm text-center transition active:scale-95">
+            <div v-if="!loading" class="text-4xl font-bold bg-gradient-to-br from-indigo-500 to-purple-600 bg-clip-text text-transparent mb-2">
+                {{ stats.normal_users }}
+            </div>
+            <div v-else class="h-10 w-16 mx-auto mb-2 bg-gradient-to-r from-gray-200 via-gray-300 to-gray-200 bg-[length:200%_100%] animate-[shimmer_1.5s_infinite] rounded-lg"></div>
+            <div class="text-gray-500 text-sm">일반 사용자</div>
+        </div>
+        <div class="bg-white p-5 rounded-2xl shadow-sm text-center transition active:scale-95">
+            <div v-if="!loading" class="text-4xl font-bold bg-gradient-to-br from-indigo-500 to-purple-600 bg-clip-text text-transparent mb-2">
+                {{ stats.total_blogs }}
+            </div>
+            <div v-else class="h-10 w-16 mx-auto mb-2 bg-gradient-to-r from-gray-200 via-gray-300 to-gray-200 bg-[length:200%_100%] animate-[shimmer_1.5s_infinite] rounded-lg"></div>
+            <div class="text-gray-500 text-sm">블로그 글</div>
+        </div>
+    </div>
+
+    <!-- 최근 사용자 -->
+    <div class="bg-white p-5 rounded-2xl shadow-sm">
+        <h3 class="text-lg font-semibold mb-5">최근 사용자</h3>
+
+        <!-- 데스크톱 테이블 -->
+        <div class="hidden md:block overflow-x-auto">
+            <table class="w-full">
+                <thead>
+                    <tr class="border-b border-gray-200">
+                        <th class="text-left py-3 px-4 bg-gray-50 font-semibold text-gray-800 text-sm">아이디</th>
+                        <th class="text-left py-3 px-4 bg-gray-50 font-semibold text-gray-800 text-sm">이름</th>
+                        <th class="text-left py-3 px-4 bg-gray-50 font-semibold text-gray-800 text-sm">이메일</th>
+                        <th class="text-left py-3 px-4 bg-gray-50 font-semibold text-gray-800 text-sm">권한</th>
+                        <th class="text-left py-3 px-4 bg-gray-50 font-semibold text-gray-800 text-sm">등록일</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr v-if="loadingUsers">
+                        <td colspan="5" class="text-center py-10">
+                            <div class="inline-block w-10 h-10 border-4 border-gray-200 border-t-indigo-500 rounded-full animate-spin"></div>
+                        </td>
+                    </tr>
+                    <tr v-else-if="users.length === 0">
+                        <td colspan="5" class="text-center py-5 text-gray-500">사용자가 없습니다</td>
+                    </tr>
+                    <tr v-else v-for="user in users" :key="user.id" class="border-b border-gray-100 hover:bg-gray-50 transition">
+                        <td class="py-3 px-4">{{ user.id }}</td>
+                        <td class="py-3 px-4">{{ user.name }}</td>
+                        <td class="py-3 px-4">{{ user.email }}</td>
+                        <td class="py-3 px-4">
+                            <span v-if="user.auth_type === 'A'" class="px-3 py-1 rounded-xl text-xs font-semibold bg-gradient-to-br from-indigo-500 to-purple-600 text-white">
+                                관리자
+                            </span>
+                            <span v-else class="px-3 py-1 rounded-xl text-xs font-semibold bg-gray-200 text-gray-600">
+                                일반
+                            </span>
+                        </td>
+                        <td class="py-3 px-4">{{ formatDate(user.created_at) }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- 모바일 카드 -->
+        <div class="md:hidden">
+            <div v-if="loadingUsers" class="text-center py-10">
+                <div class="inline-block w-10 h-10 border-4 border-gray-200 border-t-indigo-500 rounded-full animate-spin"></div>
+            </div>
+            <div v-else-if="users.length === 0" class="text-center py-5 text-gray-500">
+                사용자가 없습니다
+            </div>
+            <div v-else v-for="user in users" :key="'card-' + user.id" class="bg-white p-4 rounded-xl mb-3 shadow-sm border border-gray-100">
+                <div class="flex justify-between items-center mb-2">
+                    <div class="font-semibold text-base text-gray-800">{{ user.name }}</div>
+                    <span v-if="user.auth_type === 'A'" class="px-3 py-1 rounded-xl text-xs font-semibold bg-gradient-to-br from-indigo-500 to-purple-600 text-white">
+                        관리자
+                    </span>
+                    <span v-else class="px-3 py-1 rounded-xl text-xs font-semibold bg-gray-200 text-gray-600">
+                        일반
+                    </span>
+                </div>
+                <div class="text-sm text-gray-500 my-1">📧 {{ user.email }}</div>
+                <div class="text-sm text-gray-500 my-1">🆔 {{ user.id }}</div>
+                <div class="text-sm text-gray-500 my-1">📅 {{ formatDate(user.created_at) }}</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 새로고침 버튼 -->
+    <button
+        @click="refreshAll"
+        :class="{ 'animate-spin': refreshing }"
+        class="fixed bottom-6 right-6 md:bottom-4 md:right-4 w-14 h-14 md:w-12 md:h-12 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow-lg flex items-center justify-center text-2xl md:text-xl cursor-pointer transition active:scale-95 z-50"
+        title="새로고침"
+    >
+        🔄
+    </button>
+</div>
+
+<style>
+    @keyframes shimmer {
+        0% { background-position: 200% 0; }
+        100% { background-position: -200% 0; }
+    }
+</style>
+
+<script>
+    const { createApp } = Vue;
+
+    createApp({
+        data() {
+            return {
+                loading: true,
+                loadingUsers: true,
+                refreshing: false,
+                stats: {
+                    total_users: 0,
+                    admin_users: 0,
+                    normal_users: 0,
+                    total_blogs: 0
+                },
+                users: [],
+                autoRefreshInterval: null
+            }
+        },
+        mounted() {
+            this.loadStats();
+            this.loadRecentUsers();
+
+            // 30초마다 통계 자동 갱신
+            this.autoRefreshInterval = setInterval(() => {
+                this.loadStats(true);
+            }, 30000);
+        },
+        beforeUnmount() {
+            if (this.autoRefreshInterval) {
+                clearInterval(this.autoRefreshInterval);
+            }
+        },
+        methods: {
+            async loadStats(silent = false) {
+                if (!silent) this.loading = true;
+
+                try {
+                    const data = await apiCall('/api/admin/stats');
+                    if (data.success) {
+                        this.stats = data.data;
+                    }
+                } catch (error) {
+                    console.error('통계 로드 실패:', error);
+                } finally {
+                    if (!silent) this.loading = false;
+                }
+            },
+            async loadRecentUsers() {
+                this.loadingUsers = true;
+
+                try {
+                    const data = await apiCall('/api/admin/users?page=1&limit=5');
+                    if (data.success && data.data.users) {
+                        this.users = data.data.users;
+                    } else {
+                        this.users = [];
+                    }
+                } catch (error) {
+                    console.error('사용자 로드 실패:', error);
+                    this.users = [];
+                } finally {
+                    this.loadingUsers = false;
+                }
+            },
+            async refreshAll() {
+                this.refreshing = true;
+                await Promise.all([
+                    this.loadStats(),
+                    this.loadRecentUsers()
+                ]);
+                this.refreshing = false;
+            },
+            formatDate(dateString) {
+                return new Date(dateString).toLocaleDateString('ko-KR');
+            },
+            goToUsers() {
+                window.location.href = '/admin/users';
+            }
+        }
+    }).mount('#dashboardApp');
+</script>
+{{end}}

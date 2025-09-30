@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>{{.Title}} - 관리자</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <style>
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .animate-spin {
+            animation: spin 1s linear infinite;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 overflow-x-hidden">
+    <div id="app">
+        <!-- 헤더 -->
+        <div class="sticky top-0 z-50 bg-white shadow-md px-5 py-4 flex justify-between items-center">
+            <div class="flex items-center gap-3">
+                <button class="md:hidden text-2xl p-1" @click="toggleSidebar">☰</button>
+                <div class="text-xl font-semibold text-gray-800 md:text-lg">{{.Title}}</div>
+            </div>
+            <div class="flex items-center gap-3">
+                <div class="flex items-center gap-2 px-3 py-2 bg-gray-100 rounded-full text-sm">
+                    <div class="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold">
+                        {{ userName.charAt(0) }}
+                    </div>
+                    <span class="hidden md:inline">{{ userName }}</span>
+                </div>
+                <button class="px-4 py-2 bg-red-500 text-white rounded-lg text-sm font-medium hover:bg-red-600 transition" @click="logout">
+                    로그아웃
+                </button>
+            </div>
+        </div>
+
+        <div class="flex min-h-[calc(100vh-64px)]">
+            <!-- 사이드바 -->
+            <div class="w-64 bg-white shadow-lg p-5 transition-transform duration-300 md:fixed md:left-0 md:top-16 md:bottom-0 md:z-40"
+                 :class="{ '-translate-x-full': !sidebarOpen }"
+                 class="hidden md:block">
+                <a href="/admin" class="flex items-center gap-3 px-4 py-3 mb-2 rounded-xl text-gray-600 hover:bg-gray-100 hover:text-gray-800 transition cursor-pointer no-underline"
+                   :class="{ 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white': '{{.Active}}' === 'dashboard' }">
+                    <span class="text-xl w-6 text-center">📊</span>
+                    <span>대시보드</span>
+                </a>
+                <a href="/admin/users" class="flex items-center gap-3 px-4 py-3 mb-2 rounded-xl text-gray-600 hover:bg-gray-100 hover:text-gray-800 transition cursor-pointer no-underline"
+                   :class="{ 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white': '{{.Active}}' === 'users' }">
+                    <span class="text-xl w-6 text-center">👥</span>
+                    <span>사용자 관리</span>
+                </a>
+                <div class="flex items-center gap-3 px-4 py-3 mb-2 rounded-xl text-gray-400 opacity-50 cursor-not-allowed">
+                    <span class="text-xl w-6 text-center">📝</span>
+                    <span>블로그 관리</span>
+                </div>
+                <div class="flex items-center gap-3 px-4 py-3 mb-2 rounded-xl text-gray-400 opacity-50 cursor-not-allowed">
+                    <span class="text-xl w-6 text-center">💬</span>
+                    <span>WebSocket</span>
+                </div>
+            </div>
+
+            <!-- 모바일 사이드바 -->
+            <div v-show="sidebarOpen" class="fixed left-0 top-16 bottom-0 w-64 bg-white shadow-lg p-5 z-40 md:hidden">
+                <a href="/admin" class="flex items-center gap-3 px-4 py-3 mb-2 rounded-xl text-gray-600 hover:bg-gray-100 hover:text-gray-800 transition cursor-pointer no-underline"
+                   :class="{ 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white': '{{.Active}}' === 'dashboard' }">
+                    <span class="text-xl w-6 text-center">📊</span>
+                    <span>대시보드</span>
+                </a>
+                <a href="/admin/users" class="flex items-center gap-3 px-4 py-3 mb-2 rounded-xl text-gray-600 hover:bg-gray-100 hover:text-gray-800 transition cursor-pointer no-underline"
+                   :class="{ 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white': '{{.Active}}' === 'users' }">
+                    <span class="text-xl w-6 text-center">👥</span>
+                    <span>사용자 관리</span>
+                </a>
+                <div class="flex items-center gap-3 px-4 py-3 mb-2 rounded-xl text-gray-400 opacity-50 cursor-not-allowed">
+                    <span class="text-xl w-6 text-center">📝</span>
+                    <span>블로그 관리</span>
+                </div>
+                <div class="flex items-center gap-3 px-4 py-3 mb-2 rounded-xl text-gray-400 opacity-50 cursor-not-allowed">
+                    <span class="text-xl w-6 text-center">💬</span>
+                    <span>WebSocket</span>
+                </div>
+            </div>
+
+            <!-- 오버레이 -->
+            <div v-show="sidebarOpen" class="fixed inset-0 bg-black bg-opacity-50 z-30 md:hidden" @click="toggleSidebar"></div>
+
+            <!-- 메인 콘텐츠 -->
+            <div class="flex-1 p-6 md:p-4 overflow-y-auto md:ml-0">
+                {{template "content" .}}
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { createApp } = Vue;
+
+        createApp({
+            data() {
+                return {
+                    sidebarOpen: false,
+                    userName: localStorage.getItem('user_name') || '관리자'
+                }
+            },
+            mounted() {
+                // 인증 확인
+                if (!localStorage.getItem('access_token')) {
+                    window.location.href = '/admin/login';
+                }
+
+                // 모바일에서 화면 크기 변경 시
+                window.addEventListener('resize', () => {
+                    if (window.innerWidth > 768) {
+                        this.sidebarOpen = false;
+                    }
+                });
+            },
+            methods: {
+                toggleSidebar() {
+                    this.sidebarOpen = !this.sidebarOpen;
+                },
+                logout() {
+                    if (confirm('로그아웃 하시겠습니까?')) {
+                        localStorage.clear();
+                        window.location.href = '/admin/login';
+                    }
+                }
+            }
+        }).mount('#app');
+
+        // 전역 유틸리티
+        window.apiCall = async function(url, options = {}) {
+            const token = localStorage.getItem('access_token');
+            if (token) {
+                options.headers = {
+                    ...options.headers,
+                    'Authorization': `Bearer ${token}`
+                };
+            }
+
+            const response = await fetch(url, options);
+
+            if (response.status === 401) {
+                alert('인증이 만료되었습니다. 다시 로그인해주세요.');
+                localStorage.clear();
+                window.location.href = '/admin/login';
+                return;
+            }
+
+            return response.json();
+        };
+    </script>
+</body>
+</html>

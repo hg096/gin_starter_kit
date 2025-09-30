@@ -1,2 +1,64 @@
+# 환경 변수
 .env
+.env.local
+.env.*.local
+
+# IDE 설정
 .vscode/*
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Claude 관련
+.claude/*
+# CLAUDE.md
+
+# Go 빌드 파일
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+/bin/
+/dist/
+/build/
+
+# Go 의존성
+/vendor/
+go.work
+go.work.sum
+
+# 로그 파일
+*.log
+logs/
+
+# 임시 파일
+tmp/
+temp/
+*.tmp
+
+# OS 생성 파일
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# 데이터베이스
+*.db
+*.sqlite
+*.sqlite3
+
+# 테스트 커버리지
+coverage.txt
+coverage.out
+*.cover
+
+# Air (live reload)
+tmp/
+
+# Swagger 생성 파일 (선택적)
+# docs/swagger.json
+# docs/swagger.yaml
