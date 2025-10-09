@@ -6,7 +6,6 @@ import (
 	"gin_starter/pkg/errors"
 	"gin_starter/pkg/logger"
 	"strings"
-	"time"
 )
 
 // Repository 공통 데이터베이스 리포지토리
@@ -31,6 +30,7 @@ func (r *Repository) Query(query string, args ...interface{}) (*sql.Rows, error)
 	rows, err := r.db.Query(query, args...)
 	if err != nil {
 		logger.Error("Query 실행 실패: %v", err)
+		r.LogError("Repository.Query", err.Error(), fmt.Sprintf("%s | Args: %v", query, args))
 		return nil, errors.Wrap(err, "DATABASE_ERROR", "쿼리 실행에 실패했습니다")
 	}
 	return rows, nil
@@ -42,6 +42,7 @@ func (r *Repository) Exec(query string, args ...interface{}) (sql.Result, error)
 	result, err := r.db.Exec(query, args...)
 	if err != nil {
 		logger.Error("Exec 실행 실패: %v", err)
+		r.LogError("Repository.Exec", err.Error(), fmt.Sprintf("%s | Args: %v", query, args))
 		return nil, errors.Wrap(err, "DATABASE_ERROR", "쿼리 실행에 실패했습니다")
 	}
 	return result, nil
@@ -53,6 +54,7 @@ func (r *Repository) ExecTx(tx *sql.Tx, query string, args ...interface{}) (sql.
 	result, err := tx.Exec(query, args...)
 	if err != nil {
 		logger.Error("ExecTx 실행 실패: %v", err)
+		r.LogError("Repository.ExecTx", err.Error(), fmt.Sprintf("%s | Args: %v", query, args))
 		return nil, errors.Wrap(err, "DATABASE_ERROR", "트랜잭션 쿼리 실행에 실패했습니다")
 	}
 	return result, nil
@@ -252,15 +254,115 @@ func (r *Repository) Count(table string, where string, whereArgs ...interface{})
 	return count, nil
 }
 
-// LogError 에러 로그를 데이터베이스에 저장
-func (r *Repository) LogError(location string, message string, sqlQuery string) error {
-	query := `INSERT INTO _a_error_logs (el_where, el_message, el_sql, el_regi_date) VALUES (?, ?, ?, ?)`
-
-	_, err := r.Exec(query, location, message, sqlQuery, time.Now())
-	if err != nil {
-		logger.Error("에러 로그 저장 실패: %v", err)
-		return err
+// UpdateMath 숫자 필드에 사칙연산 수행 (원자적 업데이트)
+// operations: map[컬럼명]연산 (예: map[string]string{"count": "+1", "price": "*2", "stock": "-5"})
+// 지원 연산자: + (덧셈), - (뺄셈), * (곱셈), / (나눗셈)
+func (r *Repository) UpdateMath(table string, operations map[string]string, where string, whereArgs ...interface{}) (int64, error) {
+	if len(operations) == 0 {
+		return 0, errors.New("INVALID_PARAM", "연산할 필드가 없습니다")
 	}
 
-	return nil
+	setClauses := make([]string, 0, len(operations))
+	for col, op := range operations {
+		if len(op) < 2 {
+			return 0, errors.New("INVALID_PARAM", fmt.Sprintf("잘못된 연산 형식: %s", op))
+		}
+
+		operator := string(op[0])
+		value := op[1:]
+
+		switch operator {
+		case "+":
+			setClauses = append(setClauses, fmt.Sprintf("%s = %s + %s", col, col, value))
+		case "-":
+			setClauses = append(setClauses, fmt.Sprintf("%s = %s - %s", col, col, value))
+		case "*":
+			setClauses = append(setClauses, fmt.Sprintf("%s = %s * %s", col, col, value))
+		case "/":
+			setClauses = append(setClauses, fmt.Sprintf("%s = %s / %s", col, col, value))
+		default:
+			return 0, errors.New("INVALID_PARAM", fmt.Sprintf("지원하지 않는 연산자: %s", operator))
+		}
+	}
+
+	query := fmt.Sprintf(
+		"UPDATE %s SET %s WHERE %s",
+		table,
+		strings.Join(setClauses, ", "),
+		where,
+	)
+
+	result, err := r.Exec(query, whereArgs...)
+	if err != nil {
+		return 0, err
+	}
+
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return 0, errors.Wrap(err, "DATABASE_ERROR", "영향받은 행 조회 실패")
+	}
+
+	return affected, nil
+}
+
+// UpdateMathTx 트랜잭션 내에서 사칙연산 수행
+func (r *Repository) UpdateMathTx(tx *sql.Tx, table string, operations map[string]string, where string, whereArgs ...interface{}) (int64, error) {
+	if len(operations) == 0 {
+		return 0, errors.New("INVALID_PARAM", "연산할 필드가 없습니다")
+	}
+
+	setClauses := make([]string, 0, len(operations))
+	for col, op := range operations {
+		if len(op) < 2 {
+			return 0, errors.New("INVALID_PARAM", fmt.Sprintf("잘못된 연산 형식: %s", op))
+		}
+
+		operator := string(op[0])
+		value := op[1:]
+
+		switch operator {
+		case "+":
+			setClauses = append(setClauses, fmt.Sprintf("%s = %s + %s", col, col, value))
+		case "-":
+			setClauses = append(setClauses, fmt.Sprintf("%s = %s - %s", col, col, value))
+		case "*":
+			setClauses = append(setClauses, fmt.Sprintf("%s = %s * %s", col, col, value))
+		case "/":
+			setClauses = append(setClauses, fmt.Sprintf("%s = %s / %s", col, col, value))
+		default:
+			return 0, errors.New("INVALID_PARAM", fmt.Sprintf("지원하지 않는 연산자: %s", operator))
+		}
+	}
+
+	query := fmt.Sprintf(
+		"UPDATE %s SET %s WHERE %s",
+		table,
+		strings.Join(setClauses, ", "),
+		where,
+	)
+
+	result, err := r.ExecTx(tx, query, whereArgs...)
+	if err != nil {
+		return 0, err
+	}
+
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return 0, errors.Wrap(err, "DATABASE_ERROR", "영향받은 행 조회 실패")
+	}
+
+	return affected, nil
+}
+
+// LogError 에러 로그를 데이터베이스에 저장 (트랜잭션과 무관하게 별도 커넥션 사용)
+func (r *Repository) LogError(location string, message string, sqlQuery string) {
+	query := `INSERT INTO _a_error_logs (el_where, el_message, el_sql) VALUES (?, ?, ?)`
+
+	// 트랜잭션과 무관하게 별도 커넥션으로 실행
+	go func() {
+		_, err := r.db.Exec(query, location, message, sqlQuery)
+		if err != nil {
+			logger.Error("에러 로그 저장 실패 [%s]: %v", location, err)
+		}
+	}()
 }
