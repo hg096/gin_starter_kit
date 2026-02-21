@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>로그인 - 관리자</title>
+    <title>관리자 로그인</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
     <style>
         @keyframes slideUp {
             from {
@@ -17,154 +17,290 @@
                 transform: translateY(0);
             }
         }
+
         @keyframes shake {
             0%, 100% { transform: translateX(0); }
             25% { transform: translateX(-10px); }
             75% { transform: translateX(10px); }
         }
+
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
-        .animate-slideUp {
+
+        .animate-slide-up {
             animation: slideUp 0.5s ease;
         }
+
         .animate-shake {
             animation: shake 0.5s;
         }
+
         .animate-spin {
             animation: spin 0.8s linear infinite;
         }
     </style>
 </head>
 <body class="bg-gradient-to-br from-indigo-500 to-purple-600 min-h-screen flex justify-center items-center p-5">
-    <div id="app">
-        <div class="bg-white px-8 py-10 md:px-6 md:py-8 rounded-3xl shadow-2xl w-full max-w-md animate-slideUp">
-            <!-- 로고 -->
-            <div class="text-center mb-8">
-                <div class="text-5xl mb-3">🚀</div>
-                <h1 class="text-2xl font-bold text-gray-800 mb-2">Gin Starter</h1>
-                <p class="text-sm text-gray-500">관리자 로그인</p>
-            </div>
+<div id="app">
+    <div class="bg-white px-8 py-10 md:px-6 md:py-8 rounded-3xl shadow-2xl w-full max-w-md animate-slide-up">
+        <div class="text-center mb-8">
+            <div class="text-5xl mb-3">A</div>
+            <h1 class="text-2xl font-bold text-gray-800 mb-2">Gin Starter</h1>
+            <p class="text-sm text-gray-500">관리자 로그인</p>
+        </div>
 
-            <!-- 알림 -->
-            <div v-if="alert.show" :class="['p-4 rounded-xl mb-5 text-sm animate-shake',
-                     alert.type === 'error' ? 'bg-red-50 text-red-600 border-2 border-red-200' :
-                     'bg-green-50 text-green-600 border-2 border-green-200']">
-                {{ alert.message }}
-            </div>
+        <div
+            v-if="alert.show"
+            :class="[
+                'p-4 rounded-xl mb-5 text-sm animate-shake',
+                alert.type === 'error'
+                    ? 'bg-red-50 text-red-600 border-2 border-red-200'
+                    : 'bg-green-50 text-green-600 border-2 border-green-200'
+            ]"
+        >
+            {{ alert.message }}
+        </div>
 
-            <!-- 폼 -->
-            <form @submit.prevent="handleLogin">
-                <div class="mb-5">
-                    <label for="user_id" class="block mb-2 text-gray-800 font-medium text-sm">아이디</label>
-                    <input
-                        type="text"
-                        id="user_id"
-                        v-model="form.user_id"
-                        :disabled="loading"
-                        required
-                        autocomplete="username"
-                        class="w-full px-4 py-4 border-2 border-gray-200 rounded-xl text-base transition bg-gray-50 focus:outline-none focus:border-indigo-500 focus:bg-white disabled:opacity-60"
-                    >
-                </div>
-                <div class="mb-5">
-                    <label for="user_pass" class="block mb-2 text-gray-800 font-medium text-sm">비밀번호</label>
-                    <input
-                        type="password"
-                        id="user_pass"
-                        v-model="form.user_pass"
-                        :disabled="loading"
-                        required
-                        autocomplete="current-password"
-                        class="w-full px-4 py-4 border-2 border-gray-200 rounded-xl text-base transition bg-gray-50 focus:outline-none focus:border-indigo-500 focus:bg-white disabled:opacity-60"
-                    >
-                </div>
-                <button
-                    type="submit"
+        <form @submit.prevent="handleLogin">
+            <div class="mb-5">
+                <label for="user_id" class="block mb-2 text-gray-800 font-medium text-sm">아이디</label>
+                <input
+                    id="user_id"
+                    v-model="form.user_id"
+                    type="text"
                     :disabled="loading"
-                    class="w-full px-4 py-4 bg-gradient-to-br from-indigo-500 to-purple-600 text-white rounded-xl text-base font-semibold cursor-pointer transition active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed mt-3 flex items-center justify-center"
+                    required
+                    autocomplete="username"
+                    class="w-full px-4 py-4 border-2 border-gray-200 rounded-xl text-base transition bg-gray-50 focus:outline-none focus:border-indigo-500 focus:bg-white disabled:opacity-60"
                 >
-                    <span v-if="loading" class="inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2"></span>
-                    {{ loading ? '로그인 중...' : '로그인' }}
-                </button>
-            </form>
+            </div>
+
+            <div class="mb-5">
+                <label for="user_pass" class="block mb-2 text-gray-800 font-medium text-sm">비밀번호</label>
+                <input
+                    id="user_pass"
+                    v-model="form.user_pass"
+                    type="password"
+                    :disabled="loading"
+                    required
+                    autocomplete="current-password"
+                    class="w-full px-4 py-4 border-2 border-gray-200 rounded-xl text-base transition bg-gray-50 focus:outline-none focus:border-indigo-500 focus:bg-white disabled:opacity-60"
+                >
+            </div>
+
+            <button
+                type="submit"
+                :disabled="loading"
+                class="w-full px-4 py-4 bg-gradient-to-br from-indigo-500 to-purple-600 text-white rounded-xl text-base font-semibold cursor-pointer transition active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed mt-3 flex items-center justify-center"
+            >
+                <span
+                    v-if="loading"
+                    class="inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2"
+                ></span>
+                {{ loading ? '로그인 중...' : '로그인' }}
+            </button>
+        </form>
+
+        <div class="mt-7 pt-6 border-t border-gray-200">
+            <div v-if="bootstrap.loading" class="text-sm text-gray-500">최고관리자(TA) 생성 가능 여부를 확인하는 중...</div>
+            <template v-else-if="bootstrap.canBootstrap">
+                <div class="mb-3 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+                    {{ bootstrapNotice }}
+                </div>
+                <h2 class="text-base font-semibold text-gray-800 mb-3">최고관리자(TA) 생성</h2>
+                <form class="space-y-3" @submit.prevent="handleBootstrap">
+                    <input
+                        v-model="bootstrapForm.user_id"
+                        type="text"
+                        :disabled="bootstrapSubmitting"
+                        required
+                        placeholder="user_id (3~20자, 영문/숫자)"
+                        class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl text-sm bg-gray-50 focus:outline-none focus:border-indigo-500 focus:bg-white disabled:opacity-60"
+                    >
+                    <input
+                        v-model="bootstrapForm.user_pass"
+                        type="password"
+                        :disabled="bootstrapSubmitting"
+                        required
+                        placeholder="user_pass (6~50자)"
+                        class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl text-sm bg-gray-50 focus:outline-none focus:border-indigo-500 focus:bg-white disabled:opacity-60"
+                    >
+                    <input
+                        v-model="bootstrapForm.user_name"
+                        type="text"
+                        :disabled="bootstrapSubmitting"
+                        required
+                        placeholder="이름(user_name)"
+                        class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl text-sm bg-gray-50 focus:outline-none focus:border-indigo-500 focus:bg-white disabled:opacity-60"
+                    >
+                    <input
+                        v-model="bootstrapForm.user_email"
+                        type="email"
+                        :disabled="bootstrapSubmitting"
+                        required
+                        placeholder="이메일(user_email)"
+                        class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl text-sm bg-gray-50 focus:outline-none focus:border-indigo-500 focus:bg-white disabled:opacity-60"
+                    >
+                    <button
+                        type="submit"
+                        :disabled="bootstrapSubmitting"
+                        class="w-full px-4 py-3 bg-amber-500 text-white rounded-xl text-sm font-semibold disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center"
+                    >
+                        <span
+                            v-if="bootstrapSubmitting"
+                            class="inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2"
+                        ></span>
+                        {{ bootstrapSubmitting ? '생성 중...' : '최고관리자(TA) 생성' }}
+                    </button>
+                </form>
+            </template>
         </div>
     </div>
+</div>
 
-    <script>
-        const { createApp } = Vue;
+<script>
+    const { createApp } = Vue;
 
-        createApp({
-            data() {
-                return {
-                    form: {
-                        user_id: '',
-                        user_pass: ''
-                    },
-                    loading: false,
-                    alert: {
-                        show: false,
-                        type: 'error',
-                        message: ''
-                    }
-                }
-            },
-            mounted() {
-                // 이미 로그인된 경우
-                if (localStorage.getItem('access_token')) {
-                    window.location.href = '/admin';
-                }
-            },
-            methods: {
-                showAlert(message, type = 'error') {
-                    this.alert = { show: true, type, message };
-                    setTimeout(() => {
-                        this.alert.show = false;
-                    }, 5000);
+    createApp({
+        data() {
+            return {
+                form: {
+                    user_id: '',
+                    user_pass: ''
                 },
-                async handleLogin() {
-                    this.loading = true;
-
-                    try {
-                        const response = await fetch('/api/user/login', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify(this.form)
-                        });
-
-                        const data = await response.json();
-
-                        if (data.success) {
-                            // 관리자 권한 확인
-                            if (data.data.user.auth_type !== 'A') {
-                                this.showAlert('관리자 권한이 필요합니다');
-                                return;
-                            }
-
-                            // 토큰 저장
-                            localStorage.setItem('access_token', data.data.access_token);
-                            localStorage.setItem('refresh_token', data.data.refresh_token);
-                            localStorage.setItem('user_name', data.data.user.name);
-                            localStorage.setItem('user_id', data.data.user.id);
-
-                            this.showAlert('로그인 성공! 이동 중...', 'success');
-
-                            setTimeout(() => {
-                                window.location.href = '/admin';
-                            }, 800);
-                        } else {
-                            this.showAlert(data.error?.message || '로그인에 실패했습니다');
-                        }
-                    } catch (error) {
-                        this.showAlert('서버 오류가 발생했습니다');
-                    } finally {
-                        this.loading = false;
+                loading: false,
+                bootstrap: {
+                    loading: true,
+                    canBootstrap: false,
+                    reason: '',
+                    adminCount: 0,
+                    superAdminCount: 0
+                },
+                bootstrapForm: {
+                    user_id: '',
+                    user_pass: '',
+                    user_name: '',
+                    user_email: ''
+                },
+                bootstrapSubmitting: false,
+                alert: {
+                    show: false,
+                    type: 'error',
+                    message: ''
+                }
+            };
+        },
+        mounted() {
+            this.loadBootstrapStatus();
+        },
+        computed: {
+            bootstrapNotice() {
+                if (this.bootstrap.reason === 'no_admin_account') {
+                    return '관리자 계정이 없어 임시 모드가 활성화되었습니다.';
+                }
+                if (this.bootstrap.reason === 'no_super_admin_account') {
+                    return '최고관리자(TA) 계정이 없어 임시 모드가 활성화되었습니다.';
+                }
+                return '임시 모드가 활성화되었습니다.';
+            }
+        },
+        methods: {
+            showAlert(message, type = 'error') {
+                this.alert = { show: true, type, message };
+                setTimeout(() => {
+                    this.alert.show = false;
+                }, 5000);
+            },
+            async loadBootstrapStatus() {
+                this.bootstrap.loading = true;
+                try {
+                    const response = await fetch('/api/admin/bootstrap/status', {
+                        method: 'GET',
+                        credentials: 'include'
+                    });
+                    const data = await response.json();
+                    if (data.success && data.data) {
+                        this.bootstrap.canBootstrap = !!data.data.can_bootstrap;
+                        this.bootstrap.reason = data.data.reason || '';
+                        this.bootstrap.adminCount = data.data.admin_count || 0;
+                        this.bootstrap.superAdminCount = data.data.super_admin_count || 0;
+                    } else {
+                        this.bootstrap.canBootstrap = false;
                     }
+                } catch (_) {
+                    this.bootstrap.canBootstrap = false;
+                } finally {
+                    this.bootstrap.loading = false;
+                }
+            },
+            async handleBootstrap() {
+                this.bootstrapSubmitting = true;
+                try {
+                    const response = await fetch('/api/admin/bootstrap/super-admin', {
+                        method: 'POST',
+                        credentials: 'include',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(this.bootstrapForm)
+                    });
+                    const data = await response.json();
+                    if (!data.success) {
+                        this.showAlert(data.error?.message || '최고관리자(TA) 생성에 실패했습니다.');
+                        return;
+                    }
+
+                    this.form.user_id = this.bootstrapForm.user_id;
+                    this.form.user_pass = this.bootstrapForm.user_pass;
+                    this.showAlert('최고관리자(TA)가 생성되었습니다. 새 계정으로 로그인해 주세요.', 'success');
+                    await this.loadBootstrapStatus();
+                } catch (_) {
+                    this.showAlert('처리 중 서버 오류가 발생했습니다.');
+                } finally {
+                    this.bootstrapSubmitting = false;
+                }
+            },
+            async handleLogin() {
+                this.loading = true;
+
+                try {
+                    const response = await fetch('/api/user/login', {
+                        method: 'POST',
+                        credentials: 'include',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(this.form)
+                    });
+
+                    const data = await response.json();
+
+                    if (!data.success) {
+                        this.showAlert(data.error?.message || '로그인에 실패했습니다.');
+                        return;
+                    }
+
+                    const authTypeRaw = String(data.data?.user?.auth_type || '').toUpperCase();
+                    const authType = authTypeRaw === 'AG' ? 'G' : authTypeRaw;
+                    if (!['TA', 'A', 'M', 'G'].includes(authType)) {
+                        this.showAlert('관리자 계정만 접근할 수 있습니다.');
+                        return;
+                    }
+
+                    this.showAlert('로그인 성공. 이동합니다...', 'success');
+
+                    setTimeout(() => {
+                        window.location.href = '/admin';
+                    }, 800);
+                } catch (error) {
+                    this.showAlert('서버 오류가 발생했습니다.');
+                } finally {
+                    this.loading = false;
                 }
             }
-        }).mount('#app');
-    </script>
+        }
+    }).mount('#app');
+</script>
 </body>
 </html>

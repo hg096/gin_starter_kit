@@ -1,0 +1,717 @@
+﻿[[define "content"]]
+<div id="adminChatApp" class="space-y-6">
+    <section class="bg-white p-5 rounded-2xl shadow-sm flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+        <div>
+            <h3 class="text-lg font-semibold">채팅 센터</h3>
+            <p class="text-sm text-gray-500">그룹 채팅, 1:1 채팅, 댓글형 답글을 한 화면에서 관리합니다.</p>
+        </div>
+        <div class="flex items-center gap-2 text-sm">
+            <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full" :class="connected ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'">
+                <span class="w-2 h-2 rounded-full" :class="connected ? 'bg-emerald-500' : 'bg-rose-500'"></span>
+                {{ connected ? '실시간 연결됨' : '연결 대기중' }}
+            </span>
+            <button class="px-3 py-2 bg-indigo-600 text-white rounded text-sm disabled:opacity-40" :disabled="connecting || !selectedRoom" @click="reconnectSocket">
+                {{ connecting ? '재연결 중...' : '재연결' }}
+            </button>
+        </div>
+    </section>
+
+    <section class="grid grid-cols-1 xl:grid-cols-12 gap-6">
+        <aside class="xl:col-span-4 space-y-4">
+            <div class="bg-white rounded-2xl shadow-sm p-4 space-y-3">
+                <div class="flex items-center justify-between">
+                    <h4 class="font-semibold">채팅방 목록</h4>
+                    <div class="flex items-center gap-2">
+                        <button class="text-xs px-2 py-1 rounded bg-gray-100" @click="loadRooms">새로고침</button>
+                        <div class="relative" v-if="canCreate">
+                            <button
+                                type="button"
+                                class="w-8 h-8 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 flex items-center justify-center"
+                                :class="composeMenuOpen ? 'ring-2 ring-indigo-200 border-indigo-300' : ''"
+                                @click="toggleComposeMenu"
+                                :aria-expanded="composeMenuOpen ? 'true' : 'false'"
+                                aria-label="채팅방 생성 메뉴 열기"
+                            >
+                                <svg class="w-4 h-4 text-gray-700" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M4 12h16M4 17h16"></path>
+                                </svg>
+                            </button>
+
+                            <div
+                                v-if="composeMenuOpen"
+                                class="absolute right-0 mt-2 w-[340px] max-w-[88vw] bg-white border border-gray-200 rounded-xl shadow-xl z-30 p-3 space-y-4"
+                            >
+                                <div class="flex items-center justify-between">
+                                    <h5 class="text-sm font-semibold text-gray-800">채팅방 생성 메뉴</h5>
+                                    <button type="button" class="text-xs px-2 py-1 rounded bg-gray-100" @click="closeComposeMenu">닫기</button>
+                                </div>
+
+                                <div class="space-y-3 border border-gray-100 rounded-lg p-3">
+                                    <h6 class="font-semibold text-sm">그룹 채팅 생성</h6>
+                                    <input
+                                        v-model.trim="newGroupName"
+                                        type="text"
+                                        class="w-full px-3 py-2 border rounded-lg text-sm"
+                                        placeholder="그룹 이름"
+                                    />
+                                    <div class="text-xs text-gray-500">멤버 선택 (본인은 자동 포함)</div>
+                                    <div class="max-h-40 overflow-y-auto border rounded-lg p-2 space-y-1">
+                                        <label v-for="user in otherUsers" :key="user.id" class="flex items-center gap-2 text-sm py-1">
+                                            <input type="checkbox" :value="user.id" v-model="selectedGroupMembers" />
+                                            <span>{{ user.name }} ({{ user.id }})</span>
+                                        </label>
+                                    </div>
+                                    <button class="w-full px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm disabled:opacity-40" :disabled="creatingGroup" @click="createGroupRoom">
+                                        {{ creatingGroup ? '생성 중...' : '그룹 만들기' }}
+                                    </button>
+                                </div>
+
+                                <div class="space-y-3 border border-gray-100 rounded-lg p-3">
+                                    <h6 class="font-semibold text-sm">1:1 채팅 시작</h6>
+                                    <select v-model="directTargetID" class="w-full px-3 py-2 border rounded-lg text-sm">
+                                        <option value="">대상을 선택하세요</option>
+                                        <option v-for="user in otherUsers" :key="`direct-${user.id}`" :value="user.id">
+                                            {{ user.name }} ({{ user.id }})
+                                        </option>
+                                    </select>
+                                    <button class="w-full px-3 py-2 bg-sky-600 text-white rounded-lg text-sm disabled:opacity-40" :disabled="creatingDirect" @click="startDirectRoom">
+                                        {{ creatingDirect ? '처리 중...' : '1:1 채팅 열기' }}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="max-h-[620px] overflow-y-auto space-y-2">
+                    <div v-if="rooms.length === 0" class="text-sm text-gray-500 py-4">참여 중인 채팅방이 없습니다.</div>
+                    <button
+                        v-for="room in rooms"
+                        :key="room.room_key"
+                        class="w-full text-left p-3 rounded-xl border transition"
+                        :class="selectedRoom && selectedRoom.room_key === room.room_key ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200 hover:bg-gray-50'"
+                        @click="selectRoom(room)"
+                    >
+                        <div class="flex items-center justify-between gap-2">
+                            <div class="font-medium text-sm truncate">{{ room.name }}</div>
+                            <div class="flex items-center gap-2">
+                                <span class="text-[11px] px-2 py-0.5 rounded-full"
+                                      :class="room.room_type === 'direct' ? 'bg-sky-100 text-sky-700' : 'bg-violet-100 text-violet-700'">
+                                    {{ room.room_type === 'direct' ? '1:1' : '그룹' }}
+                                </span>
+                                <span
+                                    v-if="Number(room.unread_count || 0) > 0"
+                                    class="text-[11px] px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 font-semibold"
+                                >
+                                    {{ room.unread_count }}
+                                </span>
+                            </div>
+                        </div>
+                        <div class="mt-1 text-[11px] text-gray-500">멤버 {{ room.member_count }} · 접속 {{ room.online_count }}</div>
+                    </button>
+                </div>
+            </div>
+        </aside>
+
+        <section class="xl:col-span-8 bg-white rounded-2xl shadow-sm overflow-hidden">
+            <div class="h-[680px] flex flex-col">
+                <div class="px-4 py-3 border-b bg-gray-50">
+                    <div class="font-semibold" v-if="selectedRoom">{{ selectedRoom.name }}</div>
+                    <div class="text-sm text-gray-500" v-if="selectedRoom">
+                        {{ selectedRoom.room_type === 'direct' ? '1:1 채팅' : '그룹 채팅' }}
+                    </div>
+                    <div class="text-sm text-gray-500" v-else>채팅방을 선택해주세요.</div>
+                </div>
+
+                <div ref="messageContainer" class="flex-1 p-4 space-y-3 overflow-y-auto bg-gray-50">
+                    <div v-if="!selectedRoom" class="h-full flex items-center justify-center text-sm text-gray-400">왼쪽에서 채팅방을 선택해주세요.</div>
+                    <div v-else-if="loadingMessages" class="h-full flex items-center justify-center">
+                        <div class="inline-block w-10 h-10 border-4 border-gray-200 border-t-indigo-500 rounded-full animate-spin"></div>
+                    </div>
+                    <div v-else-if="messages.length === 0" class="h-full flex items-center justify-center text-sm text-gray-400">메시지가 없습니다.</div>
+
+                    <div v-for="msg in messages" :key="msg.id" class="flex" :class="isMine(msg) ? 'justify-end' : 'justify-start'">
+                        <div class="max-w-[82%] rounded-2xl px-3 py-2 shadow-sm" :class="bubbleClass(msg)">
+                            <div class="text-[11px] opacity-75 mb-1">
+                                {{ msg.sender_name || msg.sender_id }} · {{ formatTime(msg.created_at) }}
+                            </div>
+                            <div v-if="msg.parent_id" class="text-[11px] mb-1 px-2 py-1 rounded bg-black/10">
+                                댓글 대상: {{ parentPreview(msg) }}
+                            </div>
+                            <div class="text-sm break-words whitespace-pre-wrap">{{ msg.content }}</div>
+                            <div class="mt-2 flex justify-end">
+                                <button
+                                    class="text-[11px] px-2 py-1 rounded bg-white/30 hover:bg-white/50"
+                                    @click="setReplyTarget(msg)"
+                                    :disabled="!canCreate"
+                                >
+                                    댓글
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="border-t p-3 bg-white space-y-2" v-if="selectedRoom">
+                    <div v-if="replyTarget" class="flex items-center justify-between text-xs bg-amber-50 border border-amber-200 text-amber-800 rounded px-3 py-2">
+                        <div>
+                            댓글 대상: #{{ replyTarget.id }} {{ truncate(replyTarget.content, 80) }}
+                        </div>
+                        <button class="px-2 py-1 rounded bg-white" @click="clearReplyTarget">해제</button>
+                    </div>
+                    <div class="flex gap-2">
+                        <textarea
+                            v-model.trim="draft"
+                            rows="2"
+                            class="flex-1 px-3 py-2 border rounded-lg text-sm resize-none"
+                            placeholder="메시지를 입력하세요"
+                            @keydown.enter.prevent="onEnter"
+                        ></textarea>
+                        <button class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm disabled:opacity-40" :disabled="!canSend" @click="sendMessage">
+                            전송
+                        </button>
+                    </div>
+                    <div class="text-xs text-gray-400">Enter 전송 · Shift+Enter 줄바꿈</div>
+                </div>
+            </div>
+        </section>
+    </section>
+</div>
+
+<script>
+const { createApp } = Vue;
+
+createApp({
+    data() {
+        return {
+            ctx: window.ADMIN_CONTEXT,
+            connected: false,
+            connecting: false,
+            ws: null,
+            notifyConnected: false,
+            notifyConnecting: false,
+            notifyWs: null,
+            reconnectTimer: null,
+            notifyReconnectTimer: null,
+            rooms: [],
+            users: [],
+            selectedRoom: null,
+            messages: [],
+            loadingMessages: false,
+            draft: '',
+            replyTarget: null,
+            newGroupName: '',
+            selectedGroupMembers: [],
+            directTargetID: '',
+            creatingGroup: false,
+            creatingDirect: false,
+            composeMenuOpen: false
+        };
+    },
+    computed: {
+        canCreate() {
+            if (this.ctx.isSuperAdmin) {
+                return true;
+            }
+            return !!(this.ctx.currentPage && this.ctx.currentPage.canCreate);
+        },
+        canSend() {
+            return this.canCreate && !!this.selectedRoom && this.draft.trim().length > 0;
+        },
+        otherUsers() {
+            const myID = String(this.ctx.userName || '');
+            return this.users.filter((user) => String(user.id || '') !== myID);
+        },
+        messageMap() {
+            const map = new Map();
+            for (const msg of this.messages) {
+                map.set(msg.id, msg);
+            }
+            return map;
+        }
+    },
+    async mounted() {
+        await this.bootstrap();
+        this.connectNotifySocket();
+    },
+    beforeUnmount() {
+        this.clearTimers();
+        this.closeSocket();
+        this.closeNotifySocket();
+    },
+    methods: {
+        async bootstrap() {
+            await Promise.all([this.loadRooms(), this.loadUsers()]);
+            if (this.rooms.length > 0) {
+                await this.selectRoom(this.rooms[0]);
+            }
+        },
+        toggleComposeMenu() {
+            this.composeMenuOpen = !this.composeMenuOpen;
+        },
+        closeComposeMenu() {
+            this.composeMenuOpen = false;
+        },
+        clearTimers() {
+            if (this.reconnectTimer) {
+                clearTimeout(this.reconnectTimer);
+                this.reconnectTimer = null;
+            }
+            if (this.notifyReconnectTimer) {
+                clearTimeout(this.notifyReconnectTimer);
+                this.notifyReconnectTimer = null;
+            }
+        },
+        wsURL(roomKey) {
+            const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+            return `${protocol}://${window.location.host}/ws/admin-chat?room_key=${encodeURIComponent(roomKey)}`;
+        },
+        notifyWsURL() {
+            const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+            return `${protocol}://${window.location.host}/ws/admin-chat-notify`;
+        },
+        closeSocket() {
+            if (this.ws) {
+                this.ws.close();
+                this.ws = null;
+            }
+            this.connected = false;
+            this.connecting = false;
+        },
+        closeNotifySocket() {
+            if (this.notifyWs) {
+                this.notifyWs.close();
+                this.notifyWs = null;
+            }
+            this.notifyConnected = false;
+            this.notifyConnecting = false;
+        },
+        connectSocket() {
+            if (!this.selectedRoom) {
+                return;
+            }
+
+            this.closeSocket();
+            this.connecting = true;
+
+            try {
+                this.ws = new WebSocket(this.wsURL(this.selectedRoom.room_key));
+            } catch (error) {
+                console.error('WebSocket init failed:', error);
+                this.connecting = false;
+                return;
+            }
+
+            this.ws.onopen = () => {
+                this.connected = true;
+                this.connecting = false;
+            };
+            this.ws.onmessage = (event) => {
+                this.handleIncoming(event.data);
+            };
+            this.ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+            };
+            this.ws.onclose = () => {
+                const wasConnected = this.connected;
+                this.connected = false;
+                this.connecting = false;
+                if (wasConnected) {
+                    this.scheduleReconnect();
+                }
+            };
+        },
+        connectNotifySocket() {
+            this.closeNotifySocket();
+            this.notifyConnecting = true;
+
+            try {
+                this.notifyWs = new WebSocket(this.notifyWsURL());
+            } catch (error) {
+                console.error('Notify WebSocket init failed:', error);
+                this.notifyConnecting = false;
+                return;
+            }
+
+            this.notifyWs.onopen = () => {
+                this.notifyConnected = true;
+                this.notifyConnecting = false;
+            };
+            this.notifyWs.onmessage = (event) => {
+                this.handleNotifyIncoming(event.data);
+            };
+            this.notifyWs.onerror = (error) => {
+                console.error('Notify WebSocket error:', error);
+            };
+            this.notifyWs.onclose = () => {
+                const wasConnected = this.notifyConnected;
+                this.notifyConnected = false;
+                this.notifyConnecting = false;
+                if (wasConnected) {
+                    this.scheduleNotifyReconnect();
+                }
+            };
+        },
+        reconnectSocket() {
+            if (!this.selectedRoom) {
+                return;
+            }
+            this.connectSocket();
+        },
+        scheduleReconnect() {
+            if (this.reconnectTimer || !this.selectedRoom) {
+                return;
+            }
+            this.reconnectTimer = setTimeout(() => {
+                this.reconnectTimer = null;
+                if (!this.connected && this.selectedRoom) {
+                    this.connectSocket();
+                }
+            }, 3000);
+        },
+        scheduleNotifyReconnect() {
+            if (this.notifyReconnectTimer) {
+                return;
+            }
+            this.notifyReconnectTimer = setTimeout(() => {
+                this.notifyReconnectTimer = null;
+                if (!this.notifyConnected) {
+                    this.connectNotifySocket();
+                }
+            }, 3000);
+        },
+        async loadRooms() {
+            try {
+                const res = await window.apiCall('/api/admin/chat/rooms');
+                if (!res.success || !res.data) {
+                    return;
+                }
+                this.rooms = Array.isArray(res.data.rooms) ? res.data.rooms : [];
+                if (this.selectedRoom) {
+                    const updated = this.rooms.find((room) => room.room_key === this.selectedRoom.room_key);
+                    if (updated) {
+                        this.selectedRoom = updated;
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to load rooms:', error);
+            }
+        },
+        async loadUsers() {
+            try {
+                const res = await window.apiCall('/api/admin/chat/users');
+                if (res.success && res.data && Array.isArray(res.data.users)) {
+                    this.users = res.data.users;
+                }
+            } catch (error) {
+                console.error('Failed to load users:', error);
+            }
+        },
+        async selectRoom(room) {
+            this.selectedRoom = room;
+            this.replyTarget = null;
+            this.draft = '';
+            this.closeComposeMenu();
+            await this.loadMessages();
+            this.connectSocket();
+        },
+        async loadMessages() {
+            if (!this.selectedRoom) {
+                this.messages = [];
+                return;
+            }
+
+            this.loadingMessages = true;
+            try {
+                const roomKey = encodeURIComponent(this.selectedRoom.room_key);
+                const res = await window.apiCall(`/api/admin/chat/rooms/${roomKey}/messages?limit=100`);
+                if (res.success && res.data && Array.isArray(res.data.messages)) {
+                    this.messages = res.data.messages;
+                } else {
+                    this.messages = [];
+                }
+
+                const latestMessageID = this.messages.length > 0 ? Number(this.messages[this.messages.length - 1].id || 0) : 0;
+                await this.markCurrentRoomAsRead(latestMessageID);
+                this.scrollToBottom();
+            } catch (error) {
+                console.error('Failed to load messages:', error);
+                this.messages = [];
+            } finally {
+                this.loadingMessages = false;
+            }
+        },
+        async createGroupRoom() {
+            if (!this.canCreate) {
+                return;
+            }
+            const name = this.newGroupName.trim();
+            if (!name) {
+                alert('그룹 이름을 입력해주세요.');
+                return;
+            }
+
+            this.creatingGroup = true;
+            try {
+                const res = await window.apiCall('/api/admin/chat/rooms/group', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name,
+                        member_ids: this.selectedGroupMembers
+                    })
+                });
+                if (res.success && res.data && res.data.room) {
+                    this.newGroupName = '';
+                    this.selectedGroupMembers = [];
+                    await this.loadRooms();
+                    await this.selectRoom(res.data.room);
+                    this.closeComposeMenu();
+                }
+            } catch (error) {
+                console.error('Failed to create group room:', error);
+                alert('그룹 채팅 생성에 실패했습니다.');
+            } finally {
+                this.creatingGroup = false;
+            }
+        },
+        async startDirectRoom() {
+            if (!this.canCreate) {
+                return;
+            }
+            const targetID = this.directTargetID.trim();
+            if (!targetID) {
+                alert('1:1 대상을 선택해주세요.');
+                return;
+            }
+
+            const existingRoomKey = this.buildDirectRoomKey(this.ctx.userName, targetID);
+            const existingRoom = this.rooms.find((room) => String(room.room_key || '') === existingRoomKey);
+            if (existingRoom) {
+                await this.selectRoom(existingRoom);
+                this.closeComposeMenu();
+                return;
+            }
+
+            this.creatingDirect = true;
+            try {
+                const res = await window.apiCall(`/api/admin/chat/rooms/direct/${encodeURIComponent(targetID)}`, {
+                    method: 'POST'
+                });
+                if (res.success && res.data && res.data.room) {
+                    await this.loadRooms();
+                    await this.selectRoom(res.data.room);
+                    this.closeComposeMenu();
+                }
+            } catch (error) {
+                console.error('Failed to open direct room:', error);
+                alert('1:1 채팅방 생성에 실패했습니다.');
+            } finally {
+                this.creatingDirect = false;
+            }
+        },
+        async sendMessage() {
+            if (!this.canSend || !this.selectedRoom) {
+                return;
+            }
+            const content = this.draft.trim();
+            if (!content) {
+                return;
+            }
+
+            const payload = { content };
+            if (this.replyTarget && this.replyTarget.id) {
+                payload.parent_id = this.replyTarget.id;
+            }
+
+            try {
+                const roomKey = encodeURIComponent(this.selectedRoom.room_key);
+                const res = await window.apiCall(`/api/admin/chat/rooms/${roomKey}/messages`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                if (res.success && res.data && res.data.message) {
+                    this.appendOrReplaceMessage(res.data.message);
+                }
+                this.draft = '';
+                this.replyTarget = null;
+                this.scrollToBottom();
+            } catch (error) {
+                console.error('Failed to send message:', error);
+                alert('메시지 전송에 실패했습니다.');
+            }
+        },
+        setReplyTarget(message) {
+            if (!this.canCreate) {
+                return;
+            }
+            this.replyTarget = message;
+        },
+        clearReplyTarget() {
+            this.replyTarget = null;
+        },
+        handleIncoming(rawData) {
+            let payload = null;
+            try {
+                payload = JSON.parse(rawData);
+            } catch (error) {
+                return;
+            }
+
+            if (!payload || String(payload.room || '') !== String(this.selectedRoom?.room_key || '')) {
+                return;
+            }
+
+            const type = String(payload.type || '');
+            if (type !== 'chat_message') {
+                return;
+            }
+
+            const content = payload.content || {};
+            this.appendOrReplaceMessage({
+                id: Number(content.id || 0),
+                room_key: String(content.room_key || this.selectedRoom.room_key),
+                parent_id: content.parent_id ?? null,
+                sender_id: String(content.sender_id || ''),
+                sender_name: String(content.sender_name || content.sender_id || ''),
+                content: String(content.content || ''),
+                created_at: content.created_at || new Date().toISOString()
+            });
+            this.markCurrentRoomAsRead(Number(content.id || 0));
+            this.scrollToBottom();
+        },
+        handleNotifyIncoming(rawData) {
+            let payload = null;
+            try {
+                payload = JSON.parse(rawData);
+            } catch (error) {
+                return;
+            }
+
+            if (!payload || String(payload.type || '') !== 'chat_unread') {
+                return;
+            }
+
+            const data = payload.content || {};
+            const roomKey = String(data.room_key || '');
+            if (!roomKey) {
+                return;
+            }
+            const unreadCount = Number(data.unread_count || 0);
+
+            const idx = this.rooms.findIndex((room) => String(room.room_key || '') === roomKey);
+            if (idx < 0) {
+                this.loadRooms();
+                return;
+            }
+
+            if (this.selectedRoom && String(this.selectedRoom.room_key || '') === roomKey) {
+                this.rooms[idx].unread_count = 0;
+                this.selectedRoom.unread_count = 0;
+                return;
+            }
+
+            this.rooms[idx].unread_count = unreadCount;
+        },
+        appendOrReplaceMessage(message) {
+            if (!message || !message.id) {
+                return;
+            }
+            const idx = this.messages.findIndex((item) => item.id === message.id);
+            if (idx >= 0) {
+                this.messages.splice(idx, 1, message);
+                return;
+            }
+            this.messages.push(message);
+            this.messages.sort((a, b) => Number(a.id) - Number(b.id));
+        },
+        async markCurrentRoomAsRead(lastMessageID = 0) {
+            if (!this.selectedRoom) {
+                return;
+            }
+            const roomKey = encodeURIComponent(this.selectedRoom.room_key);
+            try {
+                await window.apiCall(`/api/admin/chat/rooms/${roomKey}/read`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ last_message_id: Number(lastMessageID || 0) })
+                });
+                this.selectedRoom.unread_count = 0;
+                const idx = this.rooms.findIndex((room) => room.room_key === this.selectedRoom.room_key);
+                if (idx >= 0) {
+                    this.rooms[idx].unread_count = 0;
+                }
+            } catch (error) {
+                console.error('Failed to mark room as read:', error);
+            }
+        },
+        buildDirectRoomKey(userA, userB) {
+            const normalize = (value) => {
+                const lower = String(value || '').trim().toLowerCase();
+                if (!lower) {
+                    return 'unknown';
+                }
+                const normalized = lower.replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+                return normalized || 'unknown';
+            };
+
+            let a = normalize(userA);
+            let b = normalize(userB);
+            if (a > b) {
+                const temp = a;
+                a = b;
+                b = temp;
+            }
+            return `dm_${a}_${b}`;
+        },
+        parentPreview(message) {
+            if (!message || !message.parent_id) {
+                return '-';
+            }
+            const parent = this.messageMap.get(message.parent_id);
+            if (!parent) {
+                return `#${message.parent_id}`;
+            }
+            return `#${parent.id} ${this.truncate(parent.content || '', 40)}`;
+        },
+        truncate(value, maxLen) {
+            const text = String(value || '');
+            if (text.length <= maxLen) {
+                return text;
+            }
+            return `${text.slice(0, maxLen)}...`;
+        },
+        onEnter(event) {
+            if (event.shiftKey) {
+                return;
+            }
+            this.sendMessage();
+        },
+        isMine(msg) {
+            return String(msg.sender_id || '') === String(this.ctx.userName || '');
+        },
+        bubbleClass(msg) {
+            if (this.isMine(msg)) {
+                return 'bg-indigo-600 text-white';
+            }
+            return 'bg-white text-gray-800 border';
+        },
+        formatTime(value) {
+            if (!value) {
+                return '-';
+            }
+            return new Date(value).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+        },
+        scrollToBottom() {
+            this.$nextTick(() => {
+                const container = this.$refs.messageContainer;
+                if (!container) {
+                    return;
+                }
+                container.scrollTop = container.scrollHeight;
+            });
+        }
+    }
+}).mount('#adminChatApp');
+</script>
+[[end]]

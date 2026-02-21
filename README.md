@@ -1,5 +1,7 @@
 # Gin Starter Kit v2.0 🚀
 
+Start here: [Project One-Pass Guide](docs/PROJECT_GUIDE.md)
+
 **엔터프라이즈급** Go 언어 웹 API 스타터 킷입니다. Clean Architecture 기반으로 설계되어 **코드 재사용성**과 **유지보수성**을 최우선으로 합니다.
 
 ## ✨ 주요 특징
@@ -127,6 +129,9 @@ JWT_REFRESH_SECRET=your-32-character-refresh-key!
 JWT_TOKEN_SECRET=your-32-character-encrypt-key!
 JWT_EXPIRES_IN=30        # 액세스 토큰 (분)
 JWT_EXPIRES_RE=7         # 리프레시 토큰 (일)
+JWT_ISSUER=GinStarter
+JWT_AUDIENCE=gin-starter-client
+JWT_SUBJECT=access
 
 # App
 SERVICE_NAME=GinStarter
@@ -138,7 +143,7 @@ SERVICE_NAME=GinStarter
 # Swagger 문서 생성
 swag init -g cmd/server/main.go
 
-# 개발 모드 실행
+# 개발 모드 실행 !!!!
 go run cmd/server/main.go
 
 # 또는 빌드 후 실행

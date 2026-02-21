@@ -8,21 +8,20 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// Handler 블로그 HTTP 핸들러
+// Handler handles blog HTTP endpoints.
 type Handler struct {
 	service Service
 }
 
-// NewHandler 블로그 핸들러 생성
 func NewHandler(service Service) *Handler {
 	return &Handler{
 		service: service,
 	}
 }
 
-// Create 블로그 생성
+// Create creates a new blog post.
 // @Summary      블로그 생성
-// @Description  새로운 블로그 글을 작성합니다
+// @Description  새로운 블로그 글을 작성합니다.
 // @Tags         blog
 // @Accept       json
 // @Produce      json
@@ -33,14 +32,12 @@ func NewHandler(service Service) *Handler {
 // @Security     BearerAuth
 // @Router       /api/blog [post]
 func (h *Handler) Create(c *gin.Context) {
-	// 인증 확인
 	userID, exists := c.Get("user_id")
 	if !exists {
 		response.Unauthorized(c, "인증이 필요합니다")
 		return
 	}
 
-	// 입력 검증
 	rules := []validator.Rule{
 		{
 			Field:    "title",
@@ -64,25 +61,23 @@ func (h *Handler) Create(c *gin.Context) {
 		return
 	}
 
-	// 요청 생성
 	req := &CreateBlogRequest{
 		Title:   result.Values["title"],
 		Content: result.Values["content"],
 	}
 
-	// 블로그 생성
 	blog, err := h.service.CreateBlog(userID.(string), req)
 	if err != nil {
-		response.BadRequest(c, err.Error())
+		response.FromError(c, err)
 		return
 	}
 
 	response.Created(c, blog.ToResponse())
 }
 
-// Get 블로그 상세 조회
+// Get returns a blog by id.
 // @Summary      블로그 조회
-// @Description  ID로 블로그 글을 조회합니다
+// @Description  ID로 블로그 글을 조회합니다.
 // @Tags         blog
 // @Accept       json
 // @Produce      json
@@ -91,7 +86,6 @@ func (h *Handler) Create(c *gin.Context) {
 // @Failure      404 {object} response.Response
 // @Router       /api/blog/{id} [get]
 func (h *Handler) Get(c *gin.Context) {
-	// ID 파라미터 추출
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
@@ -99,19 +93,18 @@ func (h *Handler) Get(c *gin.Context) {
 		return
 	}
 
-	// 블로그 조회
 	blog, err := h.service.GetBlog(id)
 	if err != nil {
-		response.NotFound(c, err.Error())
+		response.FromError(c, err)
 		return
 	}
 
 	response.Success(c, blog.ToResponse())
 }
 
-// List 블로그 목록 조회
+// List returns blog list.
 // @Summary      블로그 목록
-// @Description  블로그 글 목록을 페이지네이션으로 조회합니다
+// @Description  블로그 글 목록을 페이지네이션으로 조회합니다.
 // @Tags         blog
 // @Accept       json
 // @Produce      json
@@ -121,23 +114,21 @@ func (h *Handler) Get(c *gin.Context) {
 // @Failure      500 {object} response.Response
 // @Router       /api/blog [get]
 func (h *Handler) List(c *gin.Context) {
-	// 페이지네이션 파라미터
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
 
-	// 블로그 목록 조회
 	result, err := h.service.GetBlogs(page, limit)
 	if err != nil {
-		response.InternalError(c, err.Error())
+		response.FromError(c, err)
 		return
 	}
 
 	response.Success(c, result)
 }
 
-// ListByAuthor 작성자별 블로그 목록 조회
+// ListByAuthor returns blogs by author.
 // @Summary      작성자별 블로그 목록
-// @Description  특정 작성자의 블로그 글 목록을 조회합니다
+// @Description  특정 작성자의 블로그 글 목록을 조회합니다.
 // @Tags         blog
 // @Accept       json
 // @Produce      json
@@ -154,23 +145,21 @@ func (h *Handler) ListByAuthor(c *gin.Context) {
 		return
 	}
 
-	// 페이지네이션 파라미터
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
 
-	// 블로그 목록 조회
 	result, err := h.service.GetBlogsByAuthor(authorID, page, limit)
 	if err != nil {
-		response.InternalError(c, err.Error())
+		response.FromError(c, err)
 		return
 	}
 
 	response.Success(c, result)
 }
 
-// Update 블로그 수정
+// Update updates a blog.
 // @Summary      블로그 수정
-// @Description  자신의 블로그 글을 수정합니다
+// @Description  자신의 블로그 글을 수정합니다.
 // @Tags         blog
 // @Accept       json
 // @Produce      json
@@ -184,14 +173,12 @@ func (h *Handler) ListByAuthor(c *gin.Context) {
 // @Security     BearerAuth
 // @Router       /api/blog/{id} [put]
 func (h *Handler) Update(c *gin.Context) {
-	// 인증 확인
 	userID, exists := c.Get("user_id")
 	if !exists {
 		response.Unauthorized(c, "인증이 필요합니다")
 		return
 	}
 
-	// ID 파라미터 추출
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
@@ -199,7 +186,6 @@ func (h *Handler) Update(c *gin.Context) {
 		return
 	}
 
-	// 입력 검증
 	rules := []validator.Rule{
 		{
 			Field:  "title",
@@ -221,31 +207,23 @@ func (h *Handler) Update(c *gin.Context) {
 		return
 	}
 
-	// 요청 생성
 	req := &UpdateBlogRequest{
 		Title:   result.Values["title"],
 		Content: result.Values["content"],
 	}
 
-	// 블로그 수정
 	blog, err := h.service.UpdateBlog(id, userID.(string), req)
 	if err != nil {
-		if err.Error() == "본인의 블로그만 수정할 수 있습니다" {
-			response.Forbidden(c, err.Error())
-		} else if err.Error() == "블로그를 찾을 수 없습니다" {
-			response.NotFound(c, err.Error())
-		} else {
-			response.BadRequest(c, err.Error())
-		}
+		response.FromError(c, err)
 		return
 	}
 
 	response.Success(c, blog.ToResponse())
 }
 
-// Delete 블로그 삭제
+// Delete removes a blog.
 // @Summary      블로그 삭제
-// @Description  자신의 블로그 글을 삭제합니다
+// @Description  자신의 블로그 글을 삭제합니다.
 // @Tags         blog
 // @Accept       json
 // @Produce      json
@@ -258,14 +236,12 @@ func (h *Handler) Update(c *gin.Context) {
 // @Security     BearerAuth
 // @Router       /api/blog/{id} [delete]
 func (h *Handler) Delete(c *gin.Context) {
-	// 인증 확인
 	userID, exists := c.Get("user_id")
 	if !exists {
 		response.Unauthorized(c, "인증이 필요합니다")
 		return
 	}
 
-	// ID 파라미터 추출
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
@@ -273,16 +249,8 @@ func (h *Handler) Delete(c *gin.Context) {
 		return
 	}
 
-	// 블로그 삭제
-	err = h.service.DeleteBlog(id, userID.(string))
-	if err != nil {
-		if err.Error() == "본인의 블로그만 삭제할 수 있습니다" {
-			response.Forbidden(c, err.Error())
-		} else if err.Error() == "블로그를 찾을 수 없습니다" {
-			response.NotFound(c, err.Error())
-		} else {
-			response.BadRequest(c, err.Error())
-		}
+	if err := h.service.DeleteBlog(id, userID.(string)); err != nil {
+		response.FromError(c, err)
 		return
 	}
 

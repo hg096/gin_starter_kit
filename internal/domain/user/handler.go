@@ -1,23 +1,32 @@
 package user
 
 import (
+	"errors"
+	"gin_starter/internal/config"
+	"gin_starter/internal/middleware"
 	"gin_starter/pkg/response"
 	"gin_starter/pkg/validator"
+	"io"
+	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
 
-// Handler 사용자 핸들러
+// Handler handles user HTTP endpoints.
 type Handler struct {
 	service Service
+	cfg     *config.Config
 }
 
-// NewHandler 핸들러 생성자
-func NewHandler(service Service) *Handler {
-	return &Handler{service: service}
+func NewHandler(service Service, cfg *config.Config) *Handler {
+	return &Handler{
+		service: service,
+		cfg:     cfg,
+	}
 }
 
-// Register 회원가입
+// Register user register endpoint.
 // @Summary 회원가입
 // @Tags User
 // @Accept json
@@ -26,7 +35,6 @@ func NewHandler(service Service) *Handler {
 // @Success 201 {object} response.Response
 // @Router /api/user/register [post]
 func (h *Handler) Register(c *gin.Context) {
-	// 입력값 검증
 	rules := []validator.Rule{
 		{Field: "user_id", Label: "아이디", Required: true, MinLen: 3, MaxLen: 20, Pattern: validator.PatternAlphaNum},
 		{Field: "user_pass", Label: "비밀번호", Required: true, MinLen: 6, MaxLen: 50},
@@ -40,7 +48,6 @@ func (h *Handler) Register(c *gin.Context) {
 		return
 	}
 
-	// 요청 데이터 매핑
 	req := &CreateUserRequest{
 		ID:       result.Values["user_id"],
 		Password: result.Values["user_pass"],
@@ -48,17 +55,16 @@ func (h *Handler) Register(c *gin.Context) {
 		Email:    result.Values["user_email"],
 	}
 
-	// 서비스 호출
 	user, err := h.service.Register(req)
 	if err != nil {
-		response.InternalError(c, err.Error())
+		response.FromError(c, err)
 		return
 	}
 
 	response.Created(c, gin.H{"user": user})
 }
 
-// Login 로그인
+// Login user login endpoint.
 // @Summary 로그인
 // @Tags User
 // @Accept json
@@ -85,17 +91,18 @@ func (h *Handler) Login(c *gin.Context) {
 
 	loginResp, err := h.service.Login(req)
 	if err != nil {
-		response.Unauthorized(c, err.Error())
+		response.FromError(c, err)
 		return
 	}
 
+	h.setAuthCookies(c, loginResp.AccessToken, loginResp.RefreshToken)
 	response.Success(c, loginResp)
 }
 
-// GetProfile 프로필 조회
+// GetProfile profile endpoint.
 // @Summary 프로필 조회
 // @Tags User
-// @Security Bearer
+// @Security BearerAuth
 // @Produce json
 // @Success 200 {object} response.Response
 // @Router /api/user/profile [get]
@@ -108,17 +115,17 @@ func (h *Handler) GetProfile(c *gin.Context) {
 
 	user, err := h.service.GetProfile(userID.(string))
 	if err != nil {
-		response.InternalError(c, err.Error())
+		response.FromError(c, err)
 		return
 	}
 
 	response.Success(c, gin.H{"user": user})
 }
 
-// UpdateProfile 프로필 수정
+// UpdateProfile profile update endpoint.
 // @Summary 프로필 수정
 // @Tags User
-// @Security Bearer
+// @Security BearerAuth
 // @Accept json
 // @Produce json
 // @Param body body UpdateUserRequest true "수정 정보"
@@ -150,49 +157,53 @@ func (h *Handler) UpdateProfile(c *gin.Context) {
 	}
 
 	if err := h.service.UpdateProfile(userID.(string), req); err != nil {
-		response.InternalError(c, err.Error())
+		response.FromError(c, err)
 		return
 	}
 
 	response.Success(c, gin.H{"message": "프로필이 수정되었습니다"})
 }
 
-// RefreshToken 토큰 갱신
+// RefreshToken refresh endpoint.
 // @Summary 토큰 갱신
 // @Tags User
 // @Accept json
 // @Produce json
-// @Param body body RefreshTokenRequest true "리프레시 토큰"
+// @Param body body RefreshTokenRequest false "리프레시 토큰"
 // @Success 200 {object} response.Response
 // @Router /api/user/refresh [post]
 func (h *Handler) RefreshToken(c *gin.Context) {
-	rules := []validator.Rule{
-		{Field: "refresh_token", Label: "리프레시 토큰", Required: true},
-	}
-
-	result := validator.Validate(c, rules)
-	if !result.Valid {
-		response.ValidationError(c, result.GetErrorMap())
+	var req RefreshTokenRequest
+	if err := c.ShouldBindJSON(&req); err != nil && !errors.Is(err, io.EOF) {
+		response.BadRequest(c, "잘못된 요청 형식입니다")
 		return
 	}
 
-	req := &RefreshTokenRequest{
-		RefreshToken: result.Values["refresh_token"],
+	if strings.TrimSpace(req.RefreshToken) == "" {
+		if cookieToken, err := c.Cookie(middleware.RefreshTokenCookieName); err == nil {
+			req.RefreshToken = cookieToken
+		}
 	}
 
-	tokens, err := h.service.RefreshToken(req)
+	if strings.TrimSpace(req.RefreshToken) == "" {
+		response.BadRequest(c, "리프레시 토큰이 필요합니다")
+		return
+	}
+
+	tokens, err := h.service.RefreshToken(&req)
 	if err != nil {
-		response.Unauthorized(c, err.Error())
+		response.FromError(c, err)
 		return
 	}
 
+	h.setAuthCookies(c, tokens.AccessToken, tokens.RefreshToken)
 	response.Success(c, tokens)
 }
 
-// Logout 로그아웃
+// Logout user logout endpoint.
 // @Summary 로그아웃
 // @Tags User
-// @Security Bearer
+// @Security BearerAuth
 // @Produce json
 // @Success 200 {object} response.Response
 // @Router /api/user/logout [post]
@@ -204,9 +215,37 @@ func (h *Handler) Logout(c *gin.Context) {
 	}
 
 	if err := h.service.Logout(userID.(string)); err != nil {
-		response.InternalError(c, err.Error())
+		response.FromError(c, err)
 		return
 	}
 
+	h.clearAuthCookies(c)
 	response.Success(c, gin.H{"message": "로그아웃되었습니다"})
+}
+
+func (h *Handler) setAuthCookies(c *gin.Context, accessToken, refreshToken string) {
+	secure := h.cfg != nil && h.cfg.IsProduction()
+	accessMaxAge := 30 * 60
+	refreshMaxAge := 7 * 24 * 60 * 60
+
+	if h.cfg != nil {
+		if h.cfg.JWT.AccessExpireMin > 0 {
+			accessMaxAge = h.cfg.JWT.AccessExpireMin * 60
+		}
+		if h.cfg.JWT.RefreshExpireDays > 0 {
+			refreshMaxAge = h.cfg.JWT.RefreshExpireDays * 24 * 60 * 60
+		}
+	}
+
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie(middleware.AccessTokenCookieName, accessToken, accessMaxAge, "/", "", secure, true)
+	c.SetCookie(middleware.RefreshTokenCookieName, refreshToken, refreshMaxAge, "/", "", secure, true)
+}
+
+func (h *Handler) clearAuthCookies(c *gin.Context) {
+	secure := h.cfg != nil && h.cfg.IsProduction()
+
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie(middleware.AccessTokenCookieName, "", -1, "/", "", secure, true)
+	c.SetCookie(middleware.RefreshTokenCookieName, "", -1, "/", "", secure, true)
 }

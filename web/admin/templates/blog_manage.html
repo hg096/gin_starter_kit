@@ -1,0 +1,294 @@
+[[define "content"]]
+<div id="blogAdminApp" class="space-y-6">
+    <section class="bg-white p-5 rounded-2xl shadow-sm space-y-4">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div>
+                <h3 class="text-lg font-semibold">블로그 관리</h3>
+                <p class="text-sm text-gray-500">관리자 페이지에서 게시글을 생성, 수정, 삭제할 수 있습니다.</p>
+            </div>
+            <div class="flex items-center gap-2">
+                <input
+                    v-model.trim="search"
+                    type="text"
+                    placeholder="제목/작성자 검색"
+                    class="px-3 py-2 border rounded text-sm w-56"
+                >
+                <button class="px-3 py-2 bg-indigo-600 text-white rounded text-sm" @click="loadBlogs(page)">새로고침</button>
+            </div>
+        </div>
+    </section>
+
+    <section class="bg-white p-5 rounded-2xl shadow-sm space-y-3">
+        <h4 class="font-semibold text-gray-800">{{ formMode === 'create' ? '새 글 작성' : '글 수정' }}</h4>
+        <div class="grid md:grid-cols-2 gap-3">
+            <input v-model.trim="form.title" type="text" class="px-3 py-2 border rounded text-sm" placeholder="제목 (2~200자)">
+            <input v-model.trim="form.author_id" type="text" class="px-3 py-2 border rounded text-sm" placeholder="작성자 ID (비우면 내 ID)">
+        </div>
+        <textarea
+            v-model.trim="form.content"
+            rows="7"
+            class="w-full px-3 py-2 border rounded text-sm"
+            placeholder="본문 (최대 10000자)"
+        ></textarea>
+        <div class="flex items-center gap-2">
+            <button
+                class="px-4 py-2 rounded text-sm text-white disabled:opacity-40"
+                :class="formMode === 'create' ? 'bg-emerald-600' : 'bg-violet-600'"
+                :disabled="saving"
+                @click="submitForm"
+            >
+                {{ saving ? '처리 중...' : (formMode === 'create' ? '게시글 생성' : '수정 저장') }}
+            </button>
+            <button v-if="formMode === 'update'" class="px-4 py-2 rounded text-sm bg-gray-200" @click="resetForm">취소</button>
+        </div>
+    </section>
+
+    <section class="bg-white p-5 rounded-2xl shadow-sm space-y-3">
+        <div class="flex items-center justify-between">
+            <h4 class="font-semibold text-gray-800">게시글 목록</h4>
+            <div class="text-sm text-gray-500">총 {{ total }}건</div>
+        </div>
+
+        <div class="overflow-x-auto">
+            <table class="w-full min-w-[980px] text-sm">
+                <thead>
+                <tr class="border-b bg-gray-50 text-left">
+                    <th class="py-2 px-3">ID</th>
+                    <th class="py-2 px-3">제목</th>
+                    <th class="py-2 px-3">작성자</th>
+                    <th class="py-2 px-3">등록일</th>
+                    <th class="py-2 px-3">수정일</th>
+                    <th class="py-2 px-3">작업</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr v-if="loading">
+                    <td colspan="6" class="py-8 text-center text-gray-500">불러오는 중...</td>
+                </tr>
+                <tr v-else-if="filteredBlogs.length === 0">
+                    <td colspan="6" class="py-8 text-center text-gray-500">표시할 게시글이 없습니다.</td>
+                </tr>
+                <tr v-else v-for="blog in filteredBlogs" :key="blog.id" class="border-b">
+                    <td class="py-2 px-3">{{ blog.id }}</td>
+                    <td class="py-2 px-3">
+                        <div class="font-medium text-gray-800">{{ blog.title }}</div>
+                        <div class="text-xs text-gray-500 mt-1">{{ truncate(blog.content, 80) }}</div>
+                    </td>
+                    <td class="py-2 px-3">{{ blog.author_id }}</td>
+                    <td class="py-2 px-3">{{ formatDateTime(blog.created_at) }}</td>
+                    <td class="py-2 px-3">{{ formatDateTime(blog.updated_at) }}</td>
+                    <td class="py-2 px-3">
+                        <div class="flex gap-2">
+                            <button class="px-2 py-1 bg-violet-600 text-white rounded text-xs" @click="editBlog(blog)">수정</button>
+                            <button class="px-2 py-1 bg-red-600 text-white rounded text-xs disabled:opacity-40" :disabled="deletingId === blog.id" @click="deleteBlog(blog)">
+                                {{ deletingId === blog.id ? '삭제 중...' : '삭제' }}
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div v-if="totalPages > 1" class="flex flex-wrap gap-2 pt-2">
+            <button
+                v-for="p in totalPages"
+                :key="p"
+                class="px-3 py-1 rounded text-sm"
+                :class="p === page ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-700'"
+                @click="loadBlogs(p)"
+            >
+                {{ p }}
+            </button>
+        </div>
+    </section>
+</div>
+
+<script>
+const { createApp } = Vue;
+
+createApp({
+    data() {
+        return {
+            ctx: window.ADMIN_CONTEXT,
+            loading: false,
+            saving: false,
+            deletingId: 0,
+            page: 1,
+            limit: 12,
+            total: 0,
+            blogs: [],
+            search: '',
+            formMode: 'create',
+            form: {
+                id: 0,
+                title: '',
+                content: '',
+                author_id: ''
+            }
+        };
+    },
+    computed: {
+        totalPages() {
+            const pageCount = Math.ceil((this.total || 0) / this.limit);
+            return pageCount > 0 ? pageCount : 1;
+        },
+        filteredBlogs() {
+            const keyword = this.search.trim().toLowerCase();
+            if (!keyword) {
+                return this.blogs;
+            }
+            return this.blogs.filter((blog) => {
+                return String(blog.title || '').toLowerCase().includes(keyword) ||
+                    String(blog.author_id || '').toLowerCase().includes(keyword) ||
+                    String(blog.content || '').toLowerCase().includes(keyword);
+            });
+        }
+    },
+    mounted() {
+        this.loadBlogs(1);
+    },
+    methods: {
+        async loadBlogs(nextPage = 1) {
+            this.loading = true;
+            this.page = nextPage;
+            try {
+                const res = await window.apiCall(`/api/admin/blogs?page=${this.page}&limit=${this.limit}`);
+                if (res.success && res.data) {
+                    this.blogs = res.data.blogs || [];
+                    this.total = Number(res.data.total || 0);
+                } else {
+                    this.blogs = [];
+                    this.total = 0;
+                }
+            } catch (error) {
+                console.error('Failed to load blogs:', error);
+                this.blogs = [];
+                this.total = 0;
+            } finally {
+                this.loading = false;
+            }
+        },
+        resetForm() {
+            this.formMode = 'create';
+            this.form = {
+                id: 0,
+                title: '',
+                content: '',
+                author_id: ''
+            };
+        },
+        editBlog(blog) {
+            this.formMode = 'update';
+            this.form = {
+                id: blog.id,
+                title: blog.title || '',
+                content: blog.content || '',
+                author_id: blog.author_id || ''
+            };
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        },
+        async submitForm() {
+            const title = String(this.form.title || '').trim();
+            const content = String(this.form.content || '').trim();
+
+            if (title.length < 2 || title.length > 200) {
+                alert('제목은 2~200자여야 합니다.');
+                return;
+            }
+            if (!content || content.length > 10000) {
+                alert('본문은 1~10000자여야 합니다.');
+                return;
+            }
+
+            this.saving = true;
+            try {
+                if (this.formMode === 'create') {
+                    const payload = {
+                        title: title,
+                        content: content,
+                        author_id: String(this.form.author_id || '').trim()
+                    };
+                    const res = await window.apiCall('/api/admin/blogs', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    if (!res.success) {
+                        alert(res.error?.message || '게시글 생성에 실패했습니다.');
+                        return;
+                    }
+                    this.resetForm();
+                    await this.loadBlogs(1);
+                    return;
+                }
+
+                const res = await window.apiCall(`/api/admin/blogs/${this.form.id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title: title, content: content })
+                });
+                if (!res.success) {
+                    alert(res.error?.message || '게시글 수정에 실패했습니다.');
+                    return;
+                }
+                this.resetForm();
+                await this.loadBlogs(this.page);
+            } catch (error) {
+                console.error('Failed to save blog:', error);
+                if (String(error?.message || '') === 'forbidden') {
+                    alert('해당 작업 권한이 없습니다.');
+                } else {
+                    alert('요청 처리 중 오류가 발생했습니다.');
+                }
+            } finally {
+                this.saving = false;
+            }
+        },
+        async deleteBlog(blog) {
+            if (!confirm(`게시글 #${blog.id}를 삭제하시겠습니까?`)) {
+                return;
+            }
+            this.deletingId = blog.id;
+            try {
+                const res = await window.apiCall(`/api/admin/blogs/${blog.id}`, {
+                    method: 'DELETE'
+                });
+                if (!res.success) {
+                    alert(res.error?.message || '게시글 삭제에 실패했습니다.');
+                    return;
+                }
+
+                if (this.blogs.length === 1 && this.page > 1) {
+                    await this.loadBlogs(this.page - 1);
+                } else {
+                    await this.loadBlogs(this.page);
+                }
+            } catch (error) {
+                console.error('Failed to delete blog:', error);
+                if (String(error?.message || '') === 'forbidden') {
+                    alert('해당 작업 권한이 없습니다.');
+                } else {
+                    alert('요청 처리 중 오류가 발생했습니다.');
+                }
+            } finally {
+                this.deletingId = 0;
+            }
+        },
+        truncate(value, maxLen) {
+            const text = String(value || '');
+            if (text.length <= maxLen) {
+                return text;
+            }
+            return text.slice(0, maxLen) + '...';
+        },
+        formatDateTime(value) {
+            if (!value) {
+                return '-';
+            }
+            return new Date(value).toLocaleString('ko-KR');
+        }
+    }
+}).mount('#blogAdminApp');
+</script>
+[[end]]

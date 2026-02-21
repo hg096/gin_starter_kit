@@ -1,5 +1,112 @@
 basePath: /
 definitions:
+  admin.AdminAuditLogItem:
+    properties:
+      action:
+        type: string
+      actor_id:
+        type: string
+      after_data:
+        additionalProperties: true
+        type: object
+      before_data:
+        additionalProperties: true
+        type: object
+      created_at:
+        type: string
+      id:
+        type: integer
+      ip_addr:
+        type: string
+      message:
+        type: string
+      status:
+        type: string
+      target_user_id:
+        type: string
+    type: object
+  admin.AdminAuditLogListResponse:
+    properties:
+      limit:
+        type: integer
+      logs:
+        items:
+          $ref: '#/definitions/admin.AdminAuditLogItem'
+        type: array
+      page:
+        type: integer
+      total:
+        type: integer
+    type: object
+  admin.AdminBlogListResponse:
+    properties:
+      blogs:
+        items:
+          $ref: '#/definitions/blog.Blog'
+        type: array
+      limit:
+        type: integer
+      page:
+        type: integer
+      total:
+        type: integer
+    type: object
+  admin.AdminBootstrapStatusResponse:
+    properties:
+      admin_count:
+        type: integer
+      can_bootstrap:
+        type: boolean
+      reason:
+        type: string
+      super_admin_count:
+        type: integer
+    type: object
+  admin.AdminBootstrapSuperAdminRequest:
+    properties:
+      user_email:
+        type: string
+      user_id:
+        type: string
+      user_name:
+        type: string
+      user_pass:
+        type: string
+    type: object
+  admin.AdminCreateBlogRequest:
+    properties:
+      author_id:
+        type: string
+      content:
+        type: string
+      title:
+        type: string
+    type: object
+  admin.AdminCreatePageRequest:
+    properties:
+      description:
+        type: string
+      enabled:
+        type: boolean
+      icon:
+        type: string
+      page_key:
+        type: string
+      sort_order:
+        type: integer
+      title:
+        type: string
+    type: object
+  admin.AdminLevelPolicyResponse:
+    properties:
+      enabled:
+        type: boolean
+    type: object
+  admin.AdminResetUserPasswordRequest:
+    properties:
+      new_password:
+        type: string
+    type: object
   admin.AdminStatsResponse:
     properties:
       admin_users:
@@ -11,13 +118,62 @@ definitions:
       total_users:
         type: integer
     type: object
+  admin.AdminUpdateBlogRequest:
+    properties:
+      content:
+        type: string
+      title:
+        type: string
+    type: object
+  admin.AdminUpdateDelegablePermissionsRequest:
+    properties:
+      permissions:
+        items:
+          type: string
+        type: array
+    type: object
+  admin.AdminUpdateLevelPolicyRequest:
+    properties:
+      enabled:
+        type: boolean
+    type: object
+  admin.AdminUpdatePageRequest:
+    properties:
+      description:
+        type: string
+      enabled:
+        type: boolean
+      icon:
+        type: string
+      sort_order:
+        type: integer
+      title:
+        type: string
+    type: object
   admin.AdminUpdateUserAuthRequest:
     properties:
       auth_level:
-        description: 1-10
         type: integer
       auth_type:
-        description: U, A
+        type: string
+    type: object
+  admin.AdminUpdateUserPermissionsRequest:
+    properties:
+      permissions:
+        items:
+          type: string
+        type: array
+    type: object
+  admin.AdminUpdateUserProfileRequest:
+    properties:
+      email:
+        type: string
+      name:
+        type: string
+    type: object
+  admin.AdminUpdateUserStatusRequest:
+    properties:
+      status:
         type: string
     type: object
   admin.AdminUserListResponse:
@@ -136,8 +292,6 @@ definitions:
     properties:
       refresh_token:
         type: string
-    required:
-    - refresh_token
     type: object
   user.UpdateUserRequest:
     properties:
@@ -162,6 +316,8 @@ definitions:
         type: string
       name:
         type: string
+      status:
+        type: string
     type: object
 info:
   contact: {}
@@ -169,11 +325,484 @@ info:
   title: Gin Starter API
   version: "2.0"
 paths:
+  /api/admin/audit-logs:
+    get:
+      parameters:
+      - default: 1
+        description: page
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: limit (max 100)
+        in: query
+        name: limit
+        type: integer
+      - description: action filter
+        in: query
+        name: action
+        type: string
+      - description: actor id filter
+        in: query
+        name: actor_id
+        type: string
+      - description: target user id filter
+        in: query
+        name: target_user_id
+        type: string
+      - description: start date (YYYY-MM-DD)
+        in: query
+        name: date_from
+        type: string
+      - description: end date (YYYY-MM-DD)
+        in: query
+        name: date_to
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/admin.AdminAuditLogListResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Response'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: List admin audit logs
+      tags:
+      - admin
+  /api/admin/blogs:
+    get:
+      parameters:
+      - default: 1
+        description: page
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: limit (max 100)
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/admin.AdminBlogListResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Response'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: List blogs (admin)
+      tags:
+      - admin
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: create blog payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/admin.AdminCreateBlogRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Response'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: Create blog (admin)
+      tags:
+      - admin
+  /api/admin/blogs/{id}:
+    delete:
+      parameters:
+      - description: blog id
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Response'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: Delete blog (admin)
+      tags:
+      - admin
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: blog id
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: update blog payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/admin.AdminUpdateBlogRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Response'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: Update blog (admin)
+      tags:
+      - admin
+  /api/admin/bootstrap/status:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/admin.AdminBootstrapStatusResponse'
+              type: object
+      summary: Get super-admin bootstrap status
+      tags:
+      - admin
+  /api/admin/bootstrap/super-admin:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: bootstrap payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/admin.AdminBootstrapSuperAdminRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Response'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: Bootstrap super-admin account
+      tags:
+      - admin
+  /api/admin/level-policy:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/admin.AdminLevelPolicyResponse'
+              type: object
+      security:
+      - BearerAuth: []
+      summary: Get global level policy
+      tags:
+      - admin
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: level policy payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/admin.AdminUpdateLevelPolicyRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: Update global level policy (top-admin)
+      tags:
+      - admin
+  /api/admin/pages:
+    get:
+      parameters:
+      - description: include disabled pages
+        in: query
+        name: include_disabled
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Response'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: List admin pages
+      tags:
+      - admin
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: admin page payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/admin.AdminCreatePageRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Response'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: Create admin page
+      tags:
+      - admin
+  /api/admin/pages/{page_key}:
+    delete:
+      parameters:
+      - description: page key
+        in: path
+        name: page_key
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Response'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: Delete admin page
+      tags:
+      - admin
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: page key
+        in: path
+        name: page_key
+        required: true
+        type: string
+      - description: admin page payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/admin.AdminUpdatePageRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Response'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: Update admin page
+      tags:
+      - admin
+  /api/admin/permissions:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: List available permissions
+      tags:
+      - admin
+  /api/admin/permissions/delegable:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: Get delegable permissions
+      tags:
+      - admin
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: delegable permissions payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/admin.AdminUpdateDelegablePermissionsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: Update delegable permissions (super-admin)
+      tags:
+      - admin
   /api/admin/stats:
     get:
       consumes:
       - application/json
-      description: 전체 사용자, 블로그 등의 통계를 조회합니다
       produces:
       - application/json
       responses:
@@ -188,24 +817,23 @@ paths:
               type: object
       security:
       - BearerAuth: []
-      summary: 통계 조회 (관리자)
+      summary: Get admin stats
       tags:
       - admin
   /api/admin/users:
     get:
       consumes:
       - application/json
-      description: 모든 사용자 목록을 조회합니다 (관리자 전용)
       parameters:
-      - description: '페이지 번호 (기본: 1)'
+      - description: page
         in: query
         name: page
         type: integer
-      - description: '페이지 크기 (기본: 20)'
+      - description: limit
         in: query
         name: limit
         type: integer
-      - description: 사용자 타입 (U, A)
+      - description: user type filter
         in: query
         name: user_type
         type: string
@@ -231,16 +859,15 @@ paths:
             $ref: '#/definitions/response.Response'
       security:
       - BearerAuth: []
-      summary: 사용자 목록 조회 (관리자)
+      summary: List users (admin)
       tags:
       - admin
   /api/admin/users/{id}:
     delete:
       consumes:
       - application/json
-      description: 사용자를 삭제합니다
       parameters:
-      - description: 사용자 ID
+      - description: user id
         in: path
         name: id
         required: true
@@ -258,15 +885,14 @@ paths:
             $ref: '#/definitions/response.Response'
       security:
       - BearerAuth: []
-      summary: 사용자 삭제 (관리자)
+      summary: Delete user (super-admin)
       tags:
       - admin
     get:
       consumes:
       - application/json
-      description: 특정 사용자의 상세 정보를 조회합니다
       parameters:
-      - description: 사용자 ID
+      - description: user id
         in: path
         name: id
         required: true
@@ -284,21 +910,21 @@ paths:
             $ref: '#/definitions/response.Response'
       security:
       - BearerAuth: []
-      summary: 사용자 상세 조회 (관리자)
+      summary: Get user (admin)
       tags:
       - admin
   /api/admin/users/{id}/auth:
     put:
       consumes:
       - application/json
-      description: 사용자의 권한 타입과 레벨을 수정합니다
+      description: Updates user auth type and auth level.
       parameters:
-      - description: 사용자 ID
+      - description: user id
         in: path
         name: id
         required: true
         type: string
-      - description: 권한 정보
+      - description: auth payload
         in: body
         name: request
         required: true
@@ -321,14 +947,145 @@ paths:
             $ref: '#/definitions/response.Response'
       security:
       - BearerAuth: []
-      summary: 사용자 권한 수정 (관리자)
+      summary: Update user auth (super-admin)
+      tags:
+      - admin
+  /api/admin/users/{id}/password-reset:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: user id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: password payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/admin.AdminResetUserPasswordRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: Reset user password (admin)
+      tags:
+      - admin
+  /api/admin/users/{id}/permissions:
+    get:
+      parameters:
+      - description: user id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: Get user permissions (admin)
+      tags:
+      - admin
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: user id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: permissions payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/admin.AdminUpdateUserPermissionsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: Update user permissions (admin)
+      tags:
+      - admin
+  /api/admin/users/{id}/profile:
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: user id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: profile payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/admin.AdminUpdateUserProfileRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: Update user profile (admin)
+      tags:
+      - admin
+  /api/admin/users/{id}/status:
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: user id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: status payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/admin.AdminUpdateUserStatusRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: Update user status (admin)
       tags:
       - admin
   /api/blog:
     get:
       consumes:
       - application/json
-      description: 블로그 글 목록을 페이지네이션으로 조회합니다
+      description: 블로그 글 목록을 페이지네이션으로 조회합니다.
       parameters:
       - description: '페이지 번호 (기본: 1)'
         in: query
@@ -360,7 +1117,7 @@ paths:
     post:
       consumes:
       - application/json
-      description: 새로운 블로그 글을 작성합니다
+      description: 새로운 블로그 글을 작성합니다.
       parameters:
       - description: 블로그 생성 정보
         in: body
@@ -397,7 +1154,7 @@ paths:
     delete:
       consumes:
       - application/json
-      description: 자신의 블로그 글을 삭제합니다
+      description: 자신의 블로그 글을 삭제합니다.
       parameters:
       - description: 블로그 ID
         in: path
@@ -435,7 +1192,7 @@ paths:
     get:
       consumes:
       - application/json
-      description: ID로 블로그 글을 조회합니다
+      description: ID로 블로그 글을 조회합니다.
       parameters:
       - description: 블로그 ID
         in: path
@@ -464,7 +1221,7 @@ paths:
     put:
       consumes:
       - application/json
-      description: 자신의 블로그 글을 수정합니다
+      description: 자신의 블로그 글을 수정합니다.
       parameters:
       - description: 블로그 ID
         in: path
@@ -514,7 +1271,7 @@ paths:
     get:
       consumes:
       - application/json
-      description: 특정 작성자의 블로그 글 목록을 조회합니다
+      description: 특정 작성자의 블로그 글 목록을 조회합니다.
       parameters:
       - description: 작성자 ID
         in: path
@@ -579,7 +1336,7 @@ paths:
           schema:
             $ref: '#/definitions/response.Response'
       security:
-      - Bearer: []
+      - BearerAuth: []
       summary: 로그아웃
       tags:
       - User
@@ -593,7 +1350,7 @@ paths:
           schema:
             $ref: '#/definitions/response.Response'
       security:
-      - Bearer: []
+      - BearerAuth: []
       summary: 프로필 조회
       tags:
       - User
@@ -615,7 +1372,7 @@ paths:
           schema:
             $ref: '#/definitions/response.Response'
       security:
-      - Bearer: []
+      - BearerAuth: []
       summary: 프로필 수정
       tags:
       - User
@@ -627,7 +1384,6 @@ paths:
       - description: 리프레시 토큰
         in: body
         name: body
-        required: true
         schema:
           $ref: '#/definitions/user.RefreshTokenRequest'
       produces:
@@ -665,9 +1421,9 @@ paths:
     get:
       consumes:
       - application/json
-      description: 특정 방의 접속자 목록과 정보를 조회합니다
+      description: Returns clients connected to a specific room
       parameters:
-      - description: 방 ID
+      - description: room id
         in: path
         name: room_id
         required: true
@@ -681,14 +1437,14 @@ paths:
             $ref: '#/definitions/response.Response'
       security:
       - BearerAuth: []
-      summary: 방 정보 조회
+      summary: Get websocket room info
       tags:
       - websocket
   /api/ws/stats:
     get:
       consumes:
       - application/json
-      description: 전체 방 개수와 접속자 수를 조회합니다
+      description: Returns total room and client counts
       produces:
       - application/json
       responses:
@@ -698,14 +1454,14 @@ paths:
             $ref: '#/definitions/response.Response'
       security:
       - BearerAuth: []
-      summary: WebSocket 통계
+      summary: Get websocket stats
       tags:
       - websocket
   /ws/chat:
     get:
-      description: 실시간 채팅을 위한 WebSocket 연결
+      description: WebSocket endpoint for room-based chat
       parameters:
-      - description: 방 ID
+      - description: room id
         in: query
         name: room_id
         required: true
@@ -715,11 +1471,11 @@ paths:
           description: Switching Protocols
       security:
       - BearerAuth: []
-      summary: 채팅 WebSocket
+      summary: Chat websocket
       tags:
       - websocket
 securityDefinitions:
-  Bearer:
+  BearerAuth:
     in: header
     name: Authorization
     type: apiKey

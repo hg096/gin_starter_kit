@@ -1,22 +1,36 @@
 package user
 
-import (
-	"time"
+import "time"
+
+const (
+	UserStatusActive = "active"
+	UserStatusLocked = "locked"
 )
 
-// User 사용자 모델
+// User is the domain user model.
 type User struct {
-	ID           string    `json:"id" db:"u_id"`
-	Password     string    `json:"-" db:"u_pass"` // JSON 응답에서 제외
-	Name         string    `json:"name" db:"u_name"`
-	Email        string    `json:"email" db:"u_email"`
-	AuthType     string    `json:"auth_type" db:"u_auth_type"`
-	AuthLevel    int       `json:"auth_level" db:"u_auth_level"`
-	RefreshToken string    `json:"-" db:"u_re_token"` // JSON 응답에서 제외
-	CreatedAt    time.Time `json:"created_at" db:"u_regi_date"`
+	ID              string     `json:"id" db:"u_id"`
+	Password        string     `json:"-" db:"u_pass"`
+	Name            string     `json:"name" db:"u_name"`
+	Email           string     `json:"email" db:"u_email"`
+	AuthType        string     `json:"auth_type" db:"u_auth_type"`
+	AuthLevel       int        `json:"auth_level" db:"u_auth_level"`
+	Status          string     `json:"status" db:"u_status"`
+	TokenValidAfter *time.Time `json:"-" db:"u_token_valid_after"`
+	RefreshToken    string     `json:"-" db:"u_re_token"`
+	CreatedAt       time.Time  `json:"created_at" db:"u_regi_date"`
 }
 
-// CreateUserRequest 회원가입 요청
+// AuthSnapshot represents security-sensitive fields loaded per request.
+type AuthSnapshot struct {
+	ID              string
+	AuthType        string
+	AuthLevel       int
+	Status          string
+	TokenValidAfter *time.Time
+}
+
+// CreateUserRequest is register payload.
 type CreateUserRequest struct {
 	ID       string `json:"user_id" binding:"required"`
 	Password string `json:"user_pass" binding:"required"`
@@ -24,45 +38,47 @@ type CreateUserRequest struct {
 	Email    string `json:"user_email" binding:"required,email"`
 }
 
-// UpdateUserRequest 회원정보 수정 요청
+// UpdateUserRequest is profile update payload.
 type UpdateUserRequest struct {
 	Password string `json:"user_pass,omitempty"`
 	Name     string `json:"user_name,omitempty"`
 	Email    string `json:"user_email,omitempty"`
 }
 
-// LoginRequest 로그인 요청
+// LoginRequest is login payload.
 type LoginRequest struct {
 	ID       string `json:"user_id" binding:"required"`
 	Password string `json:"user_pass" binding:"required"`
 }
 
-// LoginResponse 로그인 응답
+// LoginResponse is login response payload.
 type LoginResponse struct {
 	AccessToken  string `json:"access_token"`
 	RefreshToken string `json:"refresh_token"`
 	User         *User  `json:"user"`
 }
 
-// RefreshTokenRequest 토큰 갱신 요청
+// RefreshTokenRequest is refresh payload.
 type RefreshTokenRequest struct {
-	RefreshToken string `json:"refresh_token" binding:"required"`
+	RefreshToken string `json:"refresh_token"`
 }
 
-// RefreshTokenResponse 토큰 갱신 응답
+// RefreshTokenResponse is refresh response payload.
 type RefreshTokenResponse struct {
 	AccessToken  string `json:"access_token"`
 	RefreshToken string `json:"refresh_token"`
 }
 
-// ToPublic 비밀번호와 토큰 제거 후 반환
+// ToPublic strips sensitive values.
 func (u *User) ToPublic() *User {
 	return &User{
-		ID:        u.ID,
-		Name:      u.Name,
-		Email:     u.Email,
-		AuthType:  u.AuthType,
-		AuthLevel: u.AuthLevel,
-		CreatedAt: u.CreatedAt,
+		ID:              u.ID,
+		Name:            u.Name,
+		Email:           u.Email,
+		AuthType:        u.AuthType,
+		AuthLevel:       u.AuthLevel,
+		Status:          u.Status,
+		TokenValidAfter: u.TokenValidAfter,
+		CreatedAt:       u.CreatedAt,
 	}
 }

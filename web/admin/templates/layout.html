@@ -4,153 +4,232 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <title>{{.Title}} - 관리자</title>
+    <title>[[.Title]] - 관리자</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
     <style>
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
+
         .animate-spin {
             animation: spin 1s linear infinite;
         }
     </style>
 </head>
 <body class="bg-gray-50 overflow-x-hidden">
-    <div id="app">
-        <!-- 헤더 -->
-        <div class="sticky top-0 z-50 bg-white shadow-md px-5 py-4 flex justify-between items-center">
-            <div class="flex items-center gap-3">
-                <button class="md:hidden text-2xl p-1" @click="toggleSidebar">☰</button>
-                <div class="text-xl font-semibold text-gray-800 md:text-lg">{{.Title}}</div>
-            </div>
-            <div class="flex items-center gap-3">
-                <div class="flex items-center gap-2 px-3 py-2 bg-gray-100 rounded-full text-sm">
-                    <div class="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold">
-                        {{ userName.charAt(0) }}
-                    </div>
-                    <span class="hidden md:inline">{{ userName }}</span>
-                </div>
-                <button class="px-4 py-2 bg-red-500 text-white rounded-lg text-sm font-medium hover:bg-red-600 transition" @click="logout">
-                    로그아웃
-                </button>
-            </div>
+    <header class="sticky top-0 z-50 bg-white shadow-md px-5 py-4 flex justify-between items-center">
+        <div class="flex items-center gap-3">
+            <button id="menuToggle" class="md:hidden px-3 py-2 text-sm border border-gray-300 rounded-lg">메뉴</button>
+            <div class="text-xl font-semibold text-gray-800 md:text-lg">[[.Title]]</div>
         </div>
 
-        <div class="flex min-h-[calc(100vh-64px)]">
-            <!-- 사이드바 -->
-            <div class="w-64 bg-white shadow-lg p-5 transition-transform duration-300 md:fixed md:left-0 md:top-16 md:bottom-0 md:z-40"
-                 :class="{ '-translate-x-full': !sidebarOpen }"
-                 class="hidden md:block">
-                <a href="/admin" class="flex items-center gap-3 px-4 py-3 mb-2 rounded-xl text-gray-600 hover:bg-gray-100 hover:text-gray-800 transition cursor-pointer no-underline"
-                   :class="{ 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white': '{{.Active}}' === 'dashboard' }">
-                    <span class="text-xl w-6 text-center">📊</span>
-                    <span>대시보드</span>
-                </a>
-                <a href="/admin/users" class="flex items-center gap-3 px-4 py-3 mb-2 rounded-xl text-gray-600 hover:bg-gray-100 hover:text-gray-800 transition cursor-pointer no-underline"
-                   :class="{ 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white': '{{.Active}}' === 'users' }">
-                    <span class="text-xl w-6 text-center">👥</span>
-                    <span>사용자 관리</span>
-                </a>
-                <div class="flex items-center gap-3 px-4 py-3 mb-2 rounded-xl text-gray-400 opacity-50 cursor-not-allowed">
-                    <span class="text-xl w-6 text-center">📝</span>
-                    <span>블로그 관리</span>
+        <div class="flex items-center gap-3">
+            <div class="flex items-center gap-2 px-3 py-2 bg-gray-100 rounded-full text-sm">
+                <div class="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold">
+                    [[.UserInitial]]
                 </div>
-                <div class="flex items-center gap-3 px-4 py-3 mb-2 rounded-xl text-gray-400 opacity-50 cursor-not-allowed">
-                    <span class="text-xl w-6 text-center">💬</span>
-                    <span>WebSocket</span>
-                </div>
+                <span class="hidden md:inline">[[.UserName]]</span>
             </div>
-
-            <!-- 모바일 사이드바 -->
-            <div v-show="sidebarOpen" class="fixed left-0 top-16 bottom-0 w-64 bg-white shadow-lg p-5 z-40 md:hidden">
-                <a href="/admin" class="flex items-center gap-3 px-4 py-3 mb-2 rounded-xl text-gray-600 hover:bg-gray-100 hover:text-gray-800 transition cursor-pointer no-underline"
-                   :class="{ 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white': '{{.Active}}' === 'dashboard' }">
-                    <span class="text-xl w-6 text-center">📊</span>
-                    <span>대시보드</span>
-                </a>
-                <a href="/admin/users" class="flex items-center gap-3 px-4 py-3 mb-2 rounded-xl text-gray-600 hover:bg-gray-100 hover:text-gray-800 transition cursor-pointer no-underline"
-                   :class="{ 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white': '{{.Active}}' === 'users' }">
-                    <span class="text-xl w-6 text-center">👥</span>
-                    <span>사용자 관리</span>
-                </a>
-                <div class="flex items-center gap-3 px-4 py-3 mb-2 rounded-xl text-gray-400 opacity-50 cursor-not-allowed">
-                    <span class="text-xl w-6 text-center">📝</span>
-                    <span>블로그 관리</span>
-                </div>
-                <div class="flex items-center gap-3 px-4 py-3 mb-2 rounded-xl text-gray-400 opacity-50 cursor-not-allowed">
-                    <span class="text-xl w-6 text-center">💬</span>
-                    <span>WebSocket</span>
-                </div>
-            </div>
-
-            <!-- 오버레이 -->
-            <div v-show="sidebarOpen" class="fixed inset-0 bg-black bg-opacity-50 z-30 md:hidden" @click="toggleSidebar"></div>
-
-            <!-- 메인 콘텐츠 -->
-            <div class="flex-1 p-6 md:p-4 overflow-y-auto md:ml-0">
-                {{template "content" .}}
-            </div>
+            <button
+                id="logoutBtn"
+                class="px-4 py-2 bg-red-500 text-white rounded-lg text-sm font-medium hover:bg-red-600 transition"
+            >
+                로그아웃
+            </button>
         </div>
-    </div>
+    </header>
 
-    <script>
-        const { createApp } = Vue;
+    <div class="flex min-h-[calc(100vh-72px)]">
+        <aside class="hidden md:block w-64 bg-white shadow-lg p-5 overflow-y-auto">
+            [[range .MenuGroups]]
+            <div class="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mt-4 first:mt-0 mb-2">[[.Label]]</div>
+            [[range .Items]]
+            <a href="[[.Path]]" class="flex items-center gap-3 px-4 py-3 mb-2 rounded-xl transition no-underline [[if .Active]]bg-gradient-to-br from-indigo-500 to-purple-600 text-white[[else]]text-gray-600 hover:bg-gray-100 hover:text-gray-800[[end]]">
+                <span class="w-4">[[.Icon]]</span>
+                <span>[[.Title]]</span>
+            </a>
+            [[end]]
+            [[end]]
+        </aside>
 
-        createApp({
-            data() {
-                return {
-                    sidebarOpen: false,
-                    userName: localStorage.getItem('user_name') || '관리자'
-                }
-            },
-            mounted() {
-                // 인증 확인
-                if (!localStorage.getItem('access_token')) {
-                    window.location.href = '/admin/login';
-                }
+        <aside id="mobileSidebar" class="hidden fixed left-0 top-[72px] bottom-0 w-64 bg-white shadow-lg p-5 z-40 md:hidden overflow-y-auto">
+            [[range .MenuGroups]]
+            <div class="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mt-4 first:mt-0 mb-2">[[.Label]]</div>
+            [[range .Items]]
+            <a href="[[.Path]]" class="flex items-center gap-3 px-4 py-3 mb-2 rounded-xl transition no-underline [[if .Active]]bg-gradient-to-br from-indigo-500 to-purple-600 text-white[[else]]text-gray-600 hover:bg-gray-100 hover:text-gray-800[[end]]">
+                <span class="w-4">[[.Icon]]</span>
+                <span>[[.Title]]</span>
+            </a>
+            [[end]]
+            [[end]]
+        </aside>
 
-                // 모바일에서 화면 크기 변경 시
-                window.addEventListener('resize', () => {
-                    if (window.innerWidth > 768) {
-                        this.sidebarOpen = false;
+        <div id="mobileOverlay" class="hidden fixed inset-0 bg-black bg-opacity-50 z-30 md:hidden"></div>
+
+        <script>
+            window.ADMIN_CONTEXT = {
+                userName: '[[.UserName]]' || '관리자',
+                userType: '[[.UserType]]',
+                userLevel: [[.UserLevel]],
+                isSuperAdmin: [[if .IsSuperAdmin]]true[[else]]false[[end]],
+                levelPolicyEnabled: [[if .LevelPolicyEnabled]]true[[else]]false[[end]],
+                canStatsRead: [[if .CanStatsRead]]true[[else]]false[[end]],
+                canAccountRead: [[if .CanAccountRead]]true[[else]]false[[end]],
+                canProfileUpdate: [[if .CanProfileUpdate]]true[[else]]false[[end]],
+                canStatusUpdate: [[if .CanStatusUpdate]]true[[else]]false[[end]],
+                canPasswordReset: [[if .CanPasswordReset]]true[[else]]false[[end]],
+                canPermissionManage: [[if .CanPermissionManage]]true[[else]]false[[end]],
+                canLevelManage: [[if .CanLevelManage]]true[[else]]false[[end]],
+                canDeleteUser: [[if .CanDeleteUser]]true[[else]]false[[end]],
+                canAllowlistManage: [[if .CanAllowlistManage]]true[[else]]false[[end]],
+                canLevelPolicyManage: [[if .CanLevelPolicyManage]]true[[else]]false[[end]],
+                canAuditRead: [[if .CanAuditRead]]true[[else]]false[[end]],
+                canPageManage: [[if .CanPageManage]]true[[else]]false[[end]],
+                currentPage: {
+                    key: '[[.CurrentPageKey]]',
+                    title: '[[.CurrentPageTitle]]',
+                    description: '[[.CurrentPageDesc]]',
+                    path: '[[.CurrentPagePath]]',
+                    canRead: [[if .CurrentPageCanRead]]true[[else]]false[[end]],
+                    canCreate: [[if .CurrentPageCanCreate]]true[[else]]false[[end]],
+                    canUpdate: [[if .CurrentPageCanUpdate]]true[[else]]false[[end]],
+                    canDelete: [[if .CurrentPageCanDelete]]true[[else]]false[[end]],
+                    permissions: {
+                        read: '[[.CurrentPagePermRead]]',
+                        create: '[[.CurrentPagePermCreate]]',
+                        update: '[[.CurrentPagePermUpdate]]',
+                        delete: '[[.CurrentPagePermDelete]]'
                     }
-                });
-            },
-            methods: {
-                toggleSidebar() {
-                    this.sidebarOpen = !this.sidebarOpen;
-                },
-                logout() {
-                    if (confirm('로그아웃 하시겠습니까?')) {
-                        localStorage.clear();
+                }
+            };
+
+            if (typeof window.apiCall !== 'function') {
+                window.__adminRefreshPromise = null;
+
+                async function refreshSessionOnce() {
+                    if (window.__adminRefreshPromise) {
+                        return window.__adminRefreshPromise;
+                    }
+
+                    window.__adminRefreshPromise = (async () => {
+                        const refreshResponse = await fetch('/api/user/refresh', {
+                            method: 'POST',
+                            credentials: 'include',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: '{}'
+                        });
+                        if (!refreshResponse.ok) {
+                            throw new Error('refresh_failed');
+                        }
+                        try {
+                            await refreshResponse.json();
+                        } catch (_) {
+                            // ignore empty/non-json payload
+                        }
+                    })();
+
+                    try {
+                        await window.__adminRefreshPromise;
+                    } finally {
+                        window.__adminRefreshPromise = null;
+                    }
+                }
+
+                window.apiCall = async function(url, options = {}, hasRetried = false) {
+                    const response = await fetch(url, {
+                        credentials: 'include',
+                        ...options
+                    });
+
+                    if (response.status === 401) {
+                        if (!hasRetried && url !== '/api/user/refresh') {
+                            try {
+                                await refreshSessionOnce();
+                                return window.apiCall(url, options, true);
+                            } catch (_) {
+                                // refresh failed -> hard redirect below
+                            }
+                        }
+                        alert('세션이 만료되었습니다. 다시 로그인해 주세요.');
                         window.location.href = '/admin/login';
+                        throw new Error('unauthorized');
                     }
-                }
-            }
-        }).mount('#app');
 
-        // 전역 유틸리티
-        window.apiCall = async function(url, options = {}) {
-            const token = localStorage.getItem('access_token');
-            if (token) {
-                options.headers = {
-                    ...options.headers,
-                    'Authorization': `Bearer ${token}`
+                    if (response.status === 403) {
+                        throw new Error('forbidden');
+                    }
+
+                    if (response.status === 204) {
+                        return { success: true };
+                    }
+
+                    const contentType = response.headers.get('content-type') || '';
+                    if (!contentType.includes('application/json')) {
+                        return { success: response.ok };
+                    }
+
+                    return response.json();
                 };
             }
+        </script>
 
-            const response = await fetch(url, options);
+        <main class="flex-1 p-6 md:p-4 overflow-y-auto">
+            [[template "content" .]]
+        </main>
+    </div>
 
-            if (response.status === 401) {
-                alert('인증이 만료되었습니다. 다시 로그인해주세요.');
-                localStorage.clear();
-                window.location.href = '/admin/login';
+<script>
+    (function bindAdminLayoutEvents() {
+        const menuToggle = document.getElementById('menuToggle');
+        const mobileSidebar = document.getElementById('mobileSidebar');
+        const mobileOverlay = document.getElementById('mobileOverlay');
+        const logoutBtn = document.getElementById('logoutBtn');
+
+        const setSidebar = (open) => {
+            if (!mobileSidebar || !mobileOverlay) {
                 return;
             }
-
-            return response.json();
+            if (open) {
+                mobileSidebar.classList.remove('hidden');
+                mobileOverlay.classList.remove('hidden');
+            } else {
+                mobileSidebar.classList.add('hidden');
+                mobileOverlay.classList.add('hidden');
+            }
         };
-    </script>
+
+        if (menuToggle) {
+            menuToggle.addEventListener('click', () => {
+                const isHidden = mobileSidebar && mobileSidebar.classList.contains('hidden');
+                setSidebar(!!isHidden);
+            });
+        }
+        if (mobileOverlay) {
+            mobileOverlay.addEventListener('click', () => setSidebar(false));
+        }
+        window.addEventListener('resize', () => {
+            if (window.innerWidth > 768) {
+                setSidebar(false);
+            }
+        });
+
+        if (logoutBtn) {
+            logoutBtn.addEventListener('click', async () => {
+                if (!confirm('로그아웃 하시겠습니까?')) {
+                    return;
+                }
+
+                try {
+                    await window.apiCall('/api/user/logout', { method: 'POST' });
+                } catch (_) {
+                    // Best effort logout.
+                }
+
+                window.location.href = '/admin/login';
+            });
+        }
+    })();
+</script>
 </body>
 </html>

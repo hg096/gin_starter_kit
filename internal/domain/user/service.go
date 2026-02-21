@@ -1,16 +1,23 @@
 package user
 
 import (
+	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/hex"
 	"gin_starter/internal/config"
 	"gin_starter/internal/middleware"
+	"gin_starter/pkg/authz"
 	"gin_starter/pkg/errors"
 	"gin_starter/pkg/logger"
+	"strings"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
 )
 
-// Service 사용자 서비스 인터페이스
+const refreshTokenHashPrefix = "h1:"
+
+// Service is the user domain service interface.
 type Service interface {
 	Register(req *CreateUserRequest) (*User, error)
 	Login(req *LoginRequest) (*LoginResponse, error)
@@ -25,17 +32,11 @@ type service struct {
 	config *config.Config
 }
 
-// NewService 서비스 생성자
 func NewService(repo Repository, cfg *config.Config) Service {
-	return &service{
-		repo:   repo,
-		config: cfg,
-	}
+	return &service{repo: repo, config: cfg}
 }
 
-// Register 회원가입
 func (s *service) Register(req *CreateUserRequest) (*User, error) {
-	// 중복 체크
 	exists, err := s.repo.Exists(req.ID)
 	if err != nil {
 		return nil, err
@@ -44,21 +45,20 @@ func (s *service) Register(req *CreateUserRequest) (*User, error) {
 		return nil, errors.ErrUserExists
 	}
 
-	// 비밀번호 해싱
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
-		logger.Error("비밀번호 해싱 실패: %v", err)
-		return nil, errors.Wrap(err, "PASSWORD_HASH_FAILED", "비밀번호 처리에 실패했습니다")
+		logger.Error("failed to hash password: %v", err)
+		return nil, errors.Wrap(err, "PASSWORD_HASH_FAILED", "failed to process password")
 	}
 
-	// 사용자 생성
 	user := &User{
 		ID:        req.ID,
 		Password:  string(hashedPassword),
 		Name:      req.Name,
 		Email:     req.Email,
-		AuthType:  "U", // 일반 사용자
-		AuthLevel: 1,   // 기본 레벨
+		AuthType:  authz.AuthTypeUser,
+		AuthLevel: 1,
+		Status:    UserStatusActive,
 		CreatedAt: time.Now(),
 	}
 
@@ -66,13 +66,11 @@ func (s *service) Register(req *CreateUserRequest) (*User, error) {
 		return nil, err
 	}
 
-	logger.Info("새 사용자 등록 완료: %s", user.ID)
+	logger.Info("user registered: %s", user.ID)
 	return user.ToPublic(), nil
 }
 
-// Login 로그인
 func (s *service) Login(req *LoginRequest) (*LoginResponse, error) {
-	// 사용자 조회
 	user, err := s.repo.FindByID(req.ID)
 	if err != nil {
 		if errors.Is(err, errors.ErrUserNotFound) {
@@ -81,43 +79,52 @@ func (s *service) Login(req *LoginRequest) (*LoginResponse, error) {
 		return nil, err
 	}
 
-	// 비밀번호 확인
+	if strings.ToLower(strings.TrimSpace(user.Status)) == UserStatusLocked {
+		return nil, errors.ErrAccountLocked
+	}
+
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
-		logger.Warn("로그인 실패 (잘못된 비밀번호): %s", req.ID)
+		logger.Warn("login failed (bad password): %s", req.ID)
 		return nil, errors.ErrInvalidCredentials
 	}
 
-	// 토큰 생성
 	accessToken, err := middleware.GenerateToken(
 		user.ID,
+		user.AuthType,
+		user.AuthLevel,
 		s.config.JWT.AccessExpireMin,
 		s.config.JWT.AccessSecret,
 		s.config.JWT.TokenSecret,
-		s.config.App.ServiceName,
+		s.config.JWT.Issuer,
+		s.config.JWT.Audience,
+		s.config.JWT.Subject,
 	)
 	if err != nil {
-		logger.Error("액세스 토큰 생성 실패: %v", err)
-		return nil, errors.Wrap(err, "TOKEN_GENERATION_FAILED", "토큰 생성에 실패했습니다")
+		logger.Error("failed to generate access token: %v", err)
+		return nil, errors.Wrap(err, "TOKEN_GENERATION_FAILED", "failed to generate token")
 	}
 
 	refreshToken, err := middleware.GenerateToken(
 		user.ID,
-		s.config.JWT.RefreshExpireDays*24*60, // 일 -> 분
+		user.AuthType,
+		user.AuthLevel,
+		s.config.JWT.RefreshExpireDays*24*60,
 		s.config.JWT.RefreshSecret,
 		s.config.JWT.TokenSecret,
-		s.config.App.ServiceName,
+		s.config.JWT.Issuer,
+		s.config.JWT.Audience,
+		s.config.JWT.Subject,
 	)
 	if err != nil {
-		logger.Error("리프레시 토큰 생성 실패: %v", err)
-		return nil, errors.Wrap(err, "TOKEN_GENERATION_FAILED", "토큰 생성에 실패했습니다")
+		logger.Error("failed to generate refresh token: %v", err)
+		return nil, errors.Wrap(err, "TOKEN_GENERATION_FAILED", "failed to generate token")
 	}
 
-	// 리프레시 토큰 DB 저장
-	if err := s.repo.UpdateRefreshToken(user.ID, refreshToken); err != nil {
+	if err := s.repo.UpdateRefreshToken(user.ID, hashRefreshToken(refreshToken)); err != nil {
 		return nil, err
 	}
 
-	logger.Info("로그인 성공: %s", user.ID)
+	logger.Info("login success: %s", user.ID)
 
 	return &LoginResponse{
 		AccessToken:  accessToken,
@@ -126,106 +133,136 @@ func (s *service) Login(req *LoginRequest) (*LoginResponse, error) {
 	}, nil
 }
 
-// GetProfile 프로필 조회
 func (s *service) GetProfile(userID string) (*User, error) {
 	user, err := s.repo.FindByID(userID)
 	if err != nil {
 		return nil, err
 	}
-
 	return user.ToPublic(), nil
 }
 
-// UpdateProfile 프로필 수정
 func (s *service) UpdateProfile(userID string, req *UpdateUserRequest) error {
 	updates := make(map[string]interface{})
 
 	if req.Name != "" {
 		updates["u_name"] = req.Name
 	}
-
 	if req.Email != "" {
 		updates["u_email"] = req.Email
 	}
-
 	if req.Password != "" {
 		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 		if err != nil {
-			logger.Error("비밀번호 해싱 실패: %v", err)
-			return errors.Wrap(err, "PASSWORD_HASH_FAILED", "비밀번호 처리에 실패했습니다")
+			logger.Error("failed to hash password: %v", err)
+			return errors.Wrap(err, "PASSWORD_HASH_FAILED", "failed to process password")
 		}
 		updates["u_pass"] = string(hashedPassword)
+		updates["u_token_valid_after"] = time.Now()
+		updates["u_re_token"] = ""
 	}
 
 	if len(updates) == 0 {
-		return errors.New("NO_UPDATES", "수정할 내용이 없습니다")
+		return errors.New("NO_UPDATES", "no fields to update")
 	}
 
 	if err := s.repo.Update(userID, updates); err != nil {
 		return err
 	}
 
-	logger.Info("프로필 수정 완료: %s", userID)
+	logger.Info("profile updated: %s", userID)
 	return nil
 }
 
-// RefreshToken 토큰 갱신
 func (s *service) RefreshToken(req *RefreshTokenRequest) (*RefreshTokenResponse, error) {
-	// 리프레시 토큰 검증
 	claims, err := middleware.ValidateToken(
 		req.RefreshToken,
 		s.config.JWT.RefreshSecret,
 		s.config.JWT.TokenSecret,
+		s.config.JWT.Issuer,
+		s.config.JWT.Audience,
+		s.config.JWT.Subject,
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	// DB에 저장된 토큰과 대조
 	user, err := s.repo.FindByID(claims.UserID)
 	if err != nil {
 		return nil, err
 	}
 
-	if user.RefreshToken != req.RefreshToken {
-		logger.Warn("유효하지 않은 리프레시 토큰: %s", claims.UserID)
+	if strings.ToLower(strings.TrimSpace(user.Status)) == UserStatusLocked {
+		return nil, errors.ErrAccountLocked
+	}
+
+	if user.TokenValidAfter != nil {
+		if claims.IssuedAt == nil || !claims.IssuedAt.Time.After(*user.TokenValidAfter) {
+			return nil, errors.ErrTokenStale
+		}
+	}
+
+	levelPolicyEnabled, err := s.repo.GetLevelPolicyEnabled()
+	if err != nil {
+		return nil, err
+	}
+
+	if authz.NormalizeAuthType(user.AuthType) != authz.NormalizeAuthType(claims.UserType) {
+		return nil, errors.ErrTokenStale
+	}
+	if levelPolicyEnabled && user.AuthLevel != claims.UserLevel {
+		return nil, errors.ErrTokenStale
+	}
+
+	matched, legacyToken := isRefreshTokenMatch(user.RefreshToken, req.RefreshToken)
+	if !matched {
+		logger.Warn("invalid refresh token: %s", claims.UserID)
 		return nil, errors.ErrInvalidToken
 	}
 
-	// 새 액세스 토큰 생성
-	accessToken, err := middleware.GenerateToken(
-		user.ID,
-		s.config.JWT.AccessExpireMin,
-		s.config.JWT.AccessSecret,
-		s.config.JWT.TokenSecret,
-		s.config.App.ServiceName,
-	)
-	if err != nil {
-		return nil, errors.Wrap(err, "TOKEN_GENERATION_FAILED", "토큰 생성에 실패했습니다")
-	}
-
-	// 리프레시 토큰 재사용 판단 (24시간 이상 남았으면 재사용)
-	newRefreshToken := req.RefreshToken
-	if time.Until(claims.ExpiresAt.Time) < time.Duration(s.config.JWT.RefreshReuseHours)*time.Hour {
-		// 새 리프레시 토큰 생성
-		newRefreshToken, err = middleware.GenerateToken(
-			user.ID,
-			s.config.JWT.RefreshExpireDays*24*60,
-			s.config.JWT.RefreshSecret,
-			s.config.JWT.TokenSecret,
-			s.config.App.ServiceName,
-		)
-		if err != nil {
-			return nil, errors.Wrap(err, "TOKEN_GENERATION_FAILED", "토큰 생성에 실패했습니다")
-		}
-
-		// DB 업데이트
-		if err := s.repo.UpdateRefreshToken(user.ID, newRefreshToken); err != nil {
+	if legacyToken {
+		if err := s.repo.UpdateRefreshToken(user.ID, hashRefreshToken(req.RefreshToken)); err != nil {
 			return nil, err
 		}
 	}
 
-	logger.Info("토큰 갱신 완료: %s", user.ID)
+	accessToken, err := middleware.GenerateToken(
+		user.ID,
+		user.AuthType,
+		user.AuthLevel,
+		s.config.JWT.AccessExpireMin,
+		s.config.JWT.AccessSecret,
+		s.config.JWT.TokenSecret,
+		s.config.JWT.Issuer,
+		s.config.JWT.Audience,
+		s.config.JWT.Subject,
+	)
+	if err != nil {
+		return nil, errors.Wrap(err, "TOKEN_GENERATION_FAILED", "failed to generate token")
+	}
+
+	newRefreshToken := req.RefreshToken
+	if claims.ExpiresAt != nil && time.Until(claims.ExpiresAt.Time) < time.Duration(s.config.JWT.RefreshReuseHours)*time.Hour {
+		newRefreshToken, err = middleware.GenerateToken(
+			user.ID,
+			user.AuthType,
+			user.AuthLevel,
+			s.config.JWT.RefreshExpireDays*24*60,
+			s.config.JWT.RefreshSecret,
+			s.config.JWT.TokenSecret,
+			s.config.JWT.Issuer,
+			s.config.JWT.Audience,
+			s.config.JWT.Subject,
+		)
+		if err != nil {
+			return nil, errors.Wrap(err, "TOKEN_GENERATION_FAILED", "failed to generate token")
+		}
+
+		if err := s.repo.UpdateRefreshToken(user.ID, hashRefreshToken(newRefreshToken)); err != nil {
+			return nil, err
+		}
+	}
+
+	logger.Info("token refreshed: %s", user.ID)
 
 	return &RefreshTokenResponse{
 		AccessToken:  accessToken,
@@ -233,13 +270,33 @@ func (s *service) RefreshToken(req *RefreshTokenRequest) (*RefreshTokenResponse,
 	}, nil
 }
 
-// Logout 로그아웃
 func (s *service) Logout(userID string) error {
-	// 리프레시 토큰 삭제
-	if err := s.repo.UpdateRefreshToken(userID, ""); err != nil {
+	updates := map[string]interface{}{
+		"u_re_token":          "",
+		"u_token_valid_after": time.Now(),
+	}
+	if err := s.repo.Update(userID, updates); err != nil {
 		return err
 	}
 
-	logger.Info("로그아웃 완료: %s", userID)
+	logger.Info("logout completed: %s", userID)
 	return nil
+}
+
+func hashRefreshToken(token string) string {
+	sum := sha256.Sum256([]byte(token))
+	return refreshTokenHashPrefix + hex.EncodeToString(sum[:])
+}
+
+func isRefreshTokenMatch(storedToken, incomingToken string) (matched bool, legacyToken bool) {
+	if strings.TrimSpace(storedToken) == "" || strings.TrimSpace(incomingToken) == "" {
+		return false, false
+	}
+
+	if strings.HasPrefix(storedToken, refreshTokenHashPrefix) {
+		hashedIncoming := hashRefreshToken(incomingToken)
+		return subtle.ConstantTimeCompare([]byte(storedToken), []byte(hashedIncoming)) == 1, false
+	}
+
+	return subtle.ConstantTimeCompare([]byte(storedToken), []byte(incomingToken)) == 1, true
 }

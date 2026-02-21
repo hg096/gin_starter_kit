@@ -22,7 +22,7 @@ import (
 // @version 2.0
 // @description 개선된 Gin Starter Kit API 서버
 // @BasePath /
-// @securityDefinitions.apikey Bearer
+// @securityDefinitions.apikey BearerAuth
 // @in header
 // @name Authorization
 func main() {

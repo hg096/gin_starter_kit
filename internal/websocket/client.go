@@ -8,20 +8,13 @@ import (
 )
 
 const (
-	// 클라이언트로 메시지 쓰기 대기 시간
-	writeWait = 10 * time.Second
-
-	// 클라이언트로부터 다음 pong 메시지 대기 시간
-	pongWait = 60 * time.Second
-
-	// ping 전송 주기 (pongWait보다 작아야 함)
-	pingPeriod = (pongWait * 9) / 10
-
-	// 최대 메시지 크기
-	maxMessageSize = 512 * 1024 // 512KB
+	writeWait      = 10 * time.Second
+	pongWait       = 60 * time.Second
+	pingPeriod     = (pongWait * 9) / 10
+	maxMessageSize = 512 * 1024
 )
 
-// Client WebSocket 클라이언트
+// Client represents one websocket client connection.
 type Client struct {
 	hub    *Hub
 	conn   *websocket.Conn
@@ -30,7 +23,7 @@ type Client struct {
 	RoomID string
 }
 
-// NewClient 클라이언트 생성
+// NewClient creates a websocket client wrapper.
 func NewClient(hub *Hub, conn *websocket.Conn, userID, roomID string) *Client {
 	return &Client{
 		hub:    hub,
@@ -41,11 +34,11 @@ func NewClient(hub *Hub, conn *websocket.Conn, userID, roomID string) *Client {
 	}
 }
 
-// ReadPump 클라이언트로부터 메시지 읽기
+// ReadPump reads client messages and forwards them to hub.
 func (c *Client) ReadPump() {
 	defer func() {
 		c.hub.unregister <- c
-		c.conn.Close()
+		_ = c.conn.Close()
 	}()
 
 	c.conn.SetReadDeadline(time.Now().Add(pongWait))
@@ -59,27 +52,29 @@ func (c *Client) ReadPump() {
 		var message Message
 		err := c.conn.ReadJSON(&message)
 		if err != nil {
-			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				logger.Error("WebSocket 읽기 오류: %v", err)
+			if websocket.IsUnexpectedCloseError(
+				err,
+				websocket.CloseNormalClosure,
+				websocket.CloseGoingAway,
+				websocket.CloseNoStatusReceived,
+			) {
+				logger.Warn("websocket read error: %v", err)
 			}
 			break
 		}
 
-		// 메시지에 사용자 정보 추가
 		message.UserID = c.UserID
 		message.Room = c.RoomID
-
-		// 메시지 브로드캐스트
-		c.hub.broadcast <- &message
+		c.hub.Publish(&message)
 	}
 }
 
-// WritePump 클라이언트에게 메시지 쓰기
+// WritePump writes outbound messages and keepalive pings.
 func (c *Client) WritePump() {
 	ticker := time.NewTicker(pingPeriod)
 	defer func() {
 		ticker.Stop()
-		c.conn.Close()
+		_ = c.conn.Close()
 	}()
 
 	for {
@@ -87,14 +82,12 @@ func (c *Client) WritePump() {
 		case message, ok := <-c.send:
 			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if !ok {
-				// Hub가 채널을 닫음
-				c.conn.WriteMessage(websocket.CloseMessage, []byte{})
+				_ = c.conn.WriteMessage(websocket.CloseMessage, []byte{})
 				return
 			}
 
-			// JSON 메시지 전송
 			if err := c.conn.WriteJSON(message); err != nil {
-				logger.Error("WebSocket 쓰기 오류: %v", err)
+				logger.Error("websocket write error: %v", err)
 				return
 			}
 

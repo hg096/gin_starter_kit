@@ -1,276 +1,761 @@
-{{define "content"}}
-<div id="usersApp" class="bg-white p-5 rounded-2xl shadow-sm">
-    <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 mb-5">
-        <h3 class="text-lg font-semibold">사용자 관리</h3>
-        <div class="flex gap-2 w-full md:w-auto">
-            <select v-model="userTypeFilter" @change="loadUsers(1)" class="flex-1 md:flex-none px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-indigo-500">
-                <option value="">전체</option>
-                <option value="U">일반 사용자</option>
-                <option value="A">관리자</option>
-            </select>
-            <button @click="loadUsers(currentPage)" class="px-4 py-2 bg-indigo-500 text-white rounded-lg text-sm font-medium hover:bg-indigo-600 transition">
-                🔄 새로고침
-            </button>
-        </div>
-    </div>
+﻿<!-- @format -->
 
-    <!-- 데스크톱 테이블 -->
-    <div class="hidden md:block overflow-x-auto">
-        <table class="w-full">
-            <thead>
-                <tr class="border-b border-gray-200">
-                    <th class="text-left py-3 px-4 bg-gray-50 font-semibold text-gray-800 text-sm">아이디</th>
-                    <th class="text-left py-3 px-4 bg-gray-50 font-semibold text-gray-800 text-sm">이름</th>
-                    <th class="text-left py-3 px-4 bg-gray-50 font-semibold text-gray-800 text-sm">이메일</th>
-                    <th class="text-left py-3 px-4 bg-gray-50 font-semibold text-gray-800 text-sm">권한 타입</th>
-                    <th class="text-left py-3 px-4 bg-gray-50 font-semibold text-gray-800 text-sm">권한 레벨</th>
-                    <th class="text-left py-3 px-4 bg-gray-50 font-semibold text-gray-800 text-sm">등록일</th>
-                    <th class="text-left py-3 px-4 bg-gray-50 font-semibold text-gray-800 text-sm">작업</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr v-if="loading">
-                    <td colspan="7" class="text-center py-10">
-                        <div class="inline-block w-10 h-10 border-4 border-gray-200 border-t-indigo-500 rounded-full animate-spin"></div>
-                    </td>
-                </tr>
-                <tr v-else-if="users.length === 0">
-                    <td colspan="7" class="text-center py-5 text-gray-500">사용자가 없습니다</td>
-                </tr>
-                <tr v-else v-for="user in users" :key="user.id" class="border-b border-gray-100 hover:bg-gray-50 transition">
-                    <td class="py-3 px-4">{{ user.id }}</td>
-                    <td class="py-3 px-4">{{ user.name }}</td>
-                    <td class="py-3 px-4">{{ user.email }}</td>
-                    <td class="py-3 px-4">
-                        <span v-if="user.auth_type === 'A'" class="px-3 py-1 rounded-xl text-xs font-semibold bg-gradient-to-br from-indigo-500 to-purple-600 text-white">
-                            관리자
-                        </span>
-                        <span v-else class="px-3 py-1 rounded-xl text-xs font-semibold bg-gray-200 text-gray-600">
-                            일반
-                        </span>
-                    </td>
-                    <td class="py-3 px-4">{{ user.auth_level }}</td>
-                    <td class="py-3 px-4">{{ formatDate(user.created_at) }}</td>
-                    <td class="py-3 px-4">
-                        <button @click="openEditModal(user)" class="px-3 py-1 bg-indigo-500 text-white rounded-lg text-xs font-medium hover:bg-indigo-600 transition mr-1">
-                            수정
-                        </button>
-                        <button @click="deleteUser(user.id)" class="px-3 py-1 bg-red-500 text-white rounded-lg text-xs font-medium hover:bg-red-600 transition">
-                            삭제
-                        </button>
-                    </td>
-                </tr>
-            </tbody>
-        </table>
-    </div>
+[[define "content"]]
+<div id="usersApp" class="space-y-6">
+	<section class="bg-white p-5 rounded-2xl shadow-sm space-y-4">
+		<div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+			<h3 class="text-lg font-semibold">사용자 관리</h3>
+			<div class="flex gap-2">
+				<select v-model="userTypeFilter" @change="loadUsers(1)" class="px-3 py-2 border rounded text-sm">
+					<option value="">전체</option>
+					<option value="U">일반 사용자</option>
+					<option value="TA">최고관리자</option>
+					<option value="A">관리자</option>
+					<option value="M">매니저</option>
+					<option value="G">방문자</option>
+				</select>
+				<button @click="loadUsers(currentPage)" class="px-3 py-2 bg-indigo-500 text-white rounded text-sm">새로고침</button>
+			</div>
+		</div>
 
-    <!-- 모바일 카드 -->
-    <div class="md:hidden">
-        <div v-if="loading" class="text-center py-10">
-            <div class="inline-block w-10 h-10 border-4 border-gray-200 border-t-indigo-500 rounded-full animate-spin"></div>
-        </div>
-        <div v-else-if="users.length === 0" class="text-center py-5 text-gray-500">
-            사용자가 없습니다
-        </div>
-        <div v-else v-for="user in users" :key="'card-' + user.id" class="bg-gray-50 p-4 rounded-xl mb-3 border border-gray-200">
-            <div class="flex justify-between items-center mb-3">
-                <div class="font-semibold text-base text-gray-800">{{ user.name }}</div>
-                <span v-if="user.auth_type === 'A'" class="px-3 py-1 rounded-xl text-xs font-semibold bg-gradient-to-br from-indigo-500 to-purple-600 text-white">
-                    관리자
-                </span>
-                <span v-else class="px-3 py-1 rounded-xl text-xs font-semibold bg-gray-200 text-gray-600">
-                    일반
-                </span>
-            </div>
-            <div class="text-sm text-gray-600 my-1">📧 {{ user.email }}</div>
-            <div class="text-sm text-gray-600 my-1">🆔 {{ user.id }}</div>
-            <div class="text-sm text-gray-600 my-1">🔑 레벨 {{ user.auth_level }}</div>
-            <div class="text-sm text-gray-600 my-1">📅 {{ formatDate(user.created_at) }}</div>
-            <div class="flex gap-2 mt-3">
-                <button @click="openEditModal(user)" class="flex-1 px-3 py-2 bg-indigo-500 text-white rounded-lg text-sm font-medium hover:bg-indigo-600 transition">
-                    수정
-                </button>
-                <button @click="deleteUser(user.id)" class="flex-1 px-3 py-2 bg-red-500 text-white rounded-lg text-sm font-medium hover:bg-red-600 transition">
-                    삭제
-                </button>
-            </div>
-        </div>
-    </div>
+		<div class="overflow-x-auto">
+			<table class="w-full min-w-[1080px] text-sm">
+				<thead>
+					<tr class="border-b bg-gray-50 text-left">
+						<th class="py-2 px-3">아이디</th>
+						<th class="py-2 px-3">이름</th>
+						<th class="py-2 px-3">이메일</th>
+						<th class="py-2 px-3">권한</th>
+						<th class="py-2 px-3">레벨</th>
+						<th class="py-2 px-3">상태</th>
+						<th class="py-2 px-3">등록일</th>
+						<th class="py-2 px-3">작업</th>
+					</tr>
+				</thead>
+				<tbody>
+					<tr v-if="loading">
+						<td colspan="8" class="py-8 text-center text-gray-500">불러오는 중...</td>
+					</tr>
+					<tr v-else-if="users.length === 0">
+						<td colspan="8" class="py-8 text-center text-gray-500">사용자가 없습니다.</td>
+					</tr>
+					<tr v-else v-for="user in users" :key="user.id" class="border-b" :class="{ 'bg-indigo-50': selectedUser && selectedUser.id === user.id }">
+						<td class="py-2 px-3">{{ user.id }}</td>
+						<td class="py-2 px-3">{{ user.name }}</td>
+						<td class="py-2 px-3">{{ user.email }}</td>
+						<td class="py-2 px-3">{{ roleLabel(user.auth_type) }}</td>
+						<td class="py-2 px-3">{{ user.auth_level }}</td>
+						<td class="py-2 px-3">{{ statusLabel(user.status) }}</td>
+						<td class="py-2 px-3">{{ formatDate(user.created_at) }}</td>
+						<td class="py-2 px-3">
+							<div class="flex flex-wrap gap-1">
+								<button class="px-2 py-1 bg-sky-600 text-white rounded text-xs" @click="selectUser(user)">선택</button>
+								<button class="px-2 py-1 bg-slate-600 text-white rounded text-xs disabled:opacity-40" :disabled="!canProfileUpdate(user)" @click="editProfile(user)">프로필</button>
+								<button class="px-2 py-1 bg-amber-600 text-white rounded text-xs disabled:opacity-40" :disabled="!canStatusUpdate(user)" @click="toggleStatus(user)">{{ user.status === 'locked' ? '잠금해제' : '잠금' }}</button>
+								<button class="px-2 py-1 bg-emerald-600 text-white rounded text-xs disabled:opacity-40" :disabled="!canPasswordReset(user)" @click="resetPassword(user)">비번초기화</button>
+								<button class="px-2 py-1 bg-violet-600 text-white rounded text-xs disabled:opacity-40" :disabled="!canLevelManage(user)" @click="openAuthModal(user)">권한/레벨</button>
+								<button class="px-2 py-1 bg-red-600 text-white rounded text-xs disabled:opacity-40" :disabled="!canDeleteUser(user)" @click="deleteUser(user)">삭제</button>
+							</div>
+						</td>
+					</tr>
+				</tbody>
+			</table>
+		</div>
 
-    <!-- 페이지네이션 -->
-    <div v-if="totalPages > 1" class="flex justify-center gap-2 mt-5">
-        <button
-            v-for="page in totalPages"
-            :key="page"
-            @click="loadUsers(page)"
-            :class="['px-3 py-1 rounded-lg text-sm font-medium transition',
-                     page === currentPage ?
-                     'bg-indigo-500 text-white' :
-                     'bg-gray-200 text-gray-700 hover:bg-gray-300']"
-        >
-            {{ page }}
-        </button>
-    </div>
+		<div v-if="totalPages > 1" class="flex flex-wrap gap-2">
+			<button v-for="p in totalPages" :key="p" @click="loadUsers(p)" :class="p === currentPage ? 'px-3 py-1 bg-indigo-500 text-white rounded text-sm' : 'px-3 py-1 bg-gray-200 rounded text-sm'">{{ p }}</button>
+		</div>
+	</section>
+
+	<section v-if="ctx.isSuperAdmin" class="bg-white p-5 rounded-2xl shadow-sm space-y-3">
+		<div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+			<div>
+				<h3 class="text-lg font-semibold">레벨 정책 (전역)</h3>
+				<p class="text-sm text-gray-500">현재 상태: <span :class="levelPolicyEnabled ? 'text-emerald-700 font-semibold' : 'text-rose-700 font-semibold'">{{ levelPolicyEnabled ? '활성화' : '비활성화' }}</span></p>
+			</div>
+			<button class="px-3 py-2 rounded text-sm text-white disabled:opacity-40" :class="levelPolicyEnabled ? 'bg-rose-600' : 'bg-emerald-600'" :disabled="!ctx.isSuperAdmin || levelPolicyLoading" @click="toggleLevelPolicy">{{ levelPolicyLoading ? '처리 중...' : (levelPolicyEnabled ? '레벨 정책 비활성화' : '레벨 정책 활성화') }}</button>
+		</div>
+	</section>
+
+	<section class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+		<div class="xl:col-span-2 bg-white p-5 rounded-2xl shadow-sm space-y-3">
+			<div class="flex items-start justify-between gap-3">
+				<div>
+					<h3 class="text-lg font-semibold">권한 매트릭스</h3>
+					<p class="text-sm text-gray-500" v-if="selectedUser">대상: {{ selectedUser.id }} ({{ roleLabel(selectedUser.auth_type) }}/{{ selectedUser.auth_level }})</p>
+					<p class="text-sm text-gray-500" v-else>먼저 사용자를 선택하세요.</p>
+				</div>
+				<button class="px-3 py-2 bg-indigo-500 text-white rounded text-sm disabled:opacity-40" :disabled="!canSavePermissionDraft" :title="permissionBlockReason" @click="savePermissionDraft">저장</button>
+			</div>
+			<div v-if="selectedUser && permissionBlockReason" class="px-3 py-2 rounded border border-amber-300 bg-amber-50 text-amber-700 text-sm">{{ permissionBlockReason }}</div>
+			<div v-if="permissionLoading" class="text-sm text-gray-500 py-6">선택한 사용자의 권한을 불러오는 중...</div>
+			<div v-else-if="!selectedUser" class="text-sm text-gray-500 py-6">왼쪽 표에서 대상을 선택하세요.</div>
+			<div v-else-if="allPermissions.length === 0" class="text-sm text-gray-500 py-6">권한 목록이 없습니다.</div>
+			<div v-else class="grid md:grid-cols-2 gap-2 max-h-[420px] overflow-y-auto">
+				<label v-for="perm in allPermissions" :key="perm.code" class="flex items-center gap-2 p-2 border rounded text-sm" :class="{ 'opacity-60': !canEditSelectedPermissions }">
+					<input type="checkbox" :checked="!!draftPermissionSet[perm.code]" :disabled="!canEditSelectedPermissions" @change="toggleDraftPermission(perm.code, $event.target.checked)" />
+					<span :title="perm.code">{{ permissionLabel(perm.code) }}</span>
+				</label>
+			</div>
+		</div>
+
+		<div class="bg-white p-5 rounded-2xl shadow-sm space-y-3">
+			<h3 class="text-lg font-semibold">변경 예정(diff)</h3>
+			<div v-if="!selectedUser" class="text-sm text-gray-500">먼저 대상을 선택하세요.</div>
+			<template v-else>
+				<div class="text-sm"><span class="font-medium text-emerald-700">추가:</span> {{ permissionDiff.added.join(', ') || '없음' }}</div>
+				<div class="text-sm"><span class="font-medium text-rose-700">제거:</span> {{ permissionDiff.removed.join(', ') || '없음' }}</div>
+			</template>
+		</div>
+	</section>
+
+	<section v-if="ctx.canAllowlistManage" class="bg-white p-5 rounded-2xl shadow-sm space-y-3">
+		<div class="flex items-center justify-between gap-3">
+			<h3 class="text-lg font-semibold">위임 가능 권한 목록</h3>
+			<button class="px-3 py-2 bg-indigo-500 text-white rounded text-sm" @click="saveAllowlist">목록 저장</button>
+		</div>
+		<div class="grid md:grid-cols-2 gap-2">
+			<label v-for="perm in allPermissions" :key="'allow-'+perm.code" class="flex items-center gap-2 p-2 border rounded text-sm">
+				<input type="checkbox" v-model="allowlist" :value="perm.code" />
+				<span :title="perm.code">{{ permissionLabel(perm.code) }}</span>
+			</label>
+		</div>
+	</section>
+
+	<section v-if="ctx.canPageManage" class="bg-white p-5 rounded-2xl shadow-sm space-y-3">
+		<div class="flex items-center justify-between gap-3">
+			<h3 class="text-lg font-semibold">관리자 페이지 관리</h3>
+			<button class="px-3 py-2 bg-indigo-600 text-white rounded text-sm" @click="loadPages">새로고침</button>
+		</div>
+		<div class="p-3 border rounded-lg bg-gray-50 space-y-2">
+				<div class="flex flex-wrap items-center gap-2">
+					<input v-model.trim="newPage.page_key" placeholder="page_key (예: notices)" class="px-3 py-2 border rounded text-sm" />
+					<input v-model.trim="newPage.title" placeholder="페이지 이름" class="px-3 py-2 border rounded text-sm" />
+					<input v-model.trim="newPage.group_key" placeholder="그룹 키 (예: core)" class="px-3 py-2 border rounded text-sm" />
+					<input v-model.trim="newPage.group_label" placeholder="그룹명 (예: 운영)" class="px-3 py-2 border rounded text-sm" />
+					<input v-model.number="newPage.group_order" type="number" min="1" class="w-20 px-3 py-2 border rounded text-sm" />
+					<input v-model.trim="newPage.icon" placeholder="아이콘" class="w-24 px-3 py-2 border rounded text-sm" />
+					<input v-model.number="newPage.sort_order" type="number" min="1" class="w-20 px-3 py-2 border rounded text-sm" />
+					<label class="text-sm flex items-center gap-1"><input type="checkbox" v-model="newPage.enabled" />활성화</label>
+					<button class="px-3 py-2 bg-emerald-600 text-white rounded text-sm" @click="createPage">페이지 생성</button>
+				</div>
+				<input v-model.trim="newPage.description" placeholder="설명(선택)" class="w-full px-3 py-2 border rounded text-sm" />
+				<input v-model.trim="newPage.visible_roles_csv" placeholder="표시 역할 CSV (예: TA,A,M)" class="w-full px-3 py-2 border rounded text-sm" />
+			</div>
+			<div class="overflow-x-auto">
+				<table class="w-full min-w-[1040px] text-sm">
+					<thead>
+						<tr class="border-b bg-gray-50">
+							<th class="py-2 px-3 text-left">키</th>
+							<th class="py-2 px-3 text-left">이름</th>
+							<th class="py-2 px-3 text-left">그룹</th>
+							<th class="py-2 px-3 text-left">경로</th>
+							<th class="py-2 px-3 text-left">상태</th>
+							<th class="py-2 px-3 text-left">작업</th>
+						</tr>
+					</thead>
+					<tbody>
+						<tr v-if="pageLoading">
+							<td colspan="6" class="py-6 text-center text-gray-500">불러오는 중...</td>
+						</tr>
+						<tr v-else-if="pages.length === 0">
+							<td colspan="6" class="py-6 text-center text-gray-500">페이지가 없습니다.</td>
+						</tr>
+						<tr v-else v-for="page in pages" :key="page.page_key" class="border-b">
+							<td class="py-2 px-3">{{ page.page_key }}</td>
+							<td class="py-2 px-3">{{ page.title }}</td>
+							<td class="py-2 px-3">
+								<div class="text-xs text-gray-700">{{ page.group_label || '-' }}</div>
+								<div class="text-[11px] text-gray-500">{{ page.group_key || '-' }} · {{ page.group_order || 0 }}</div>
+							</td>
+							<td class="py-2 px-3"><a :href="page.path" target="_blank" class="text-indigo-600 hover:underline">{{ page.path }}</a></td>
+							<td class="py-2 px-3"><span :class="page.enabled ? 'text-emerald-700' : 'text-rose-700'">{{ page.enabled ? '활성' : '비활성' }}</span></td>
+							<td class="py-2 px-3">
+							<div class="flex gap-2"><button class="px-2 py-1 rounded text-xs text-white" :class="page.enabled ? 'bg-amber-600' : 'bg-emerald-600'" @click="togglePageEnabled(page)">{{ page.enabled ? '비활성화' : '활성화' }}</button><button class="px-2 py-1 rounded text-xs text-white bg-red-600 disabled:opacity-40" :disabled="page.builtin" @click="deletePageItem(page)">삭제</button></div>
+						</td>
+					</tr>
+				</tbody>
+			</table>
+		</div>
+	</section>
+
+	<section v-if="ctx.canAuditRead" class="bg-white p-5 rounded-2xl shadow-sm space-y-3">
+		<div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+			<h3 class="text-lg font-semibold">감사 로그</h3>
+			<div class="flex gap-2"><button class="px-3 py-2 bg-gray-100 rounded text-sm" @click="resetAuditFilters">초기화</button><button class="px-3 py-2 bg-indigo-500 text-white rounded text-sm" @click="loadAuditLogs(1)">조회</button></div>
+		</div>
+		<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-2">
+			<select v-model="auditFilters.action" class="px-3 py-2 border rounded text-sm">
+				<option :value="permissionActionPreset">권한 관련 전체 액션</option>
+				<option value="">전체 액션</option>
+				<option value="admin.account.permission.manage">권한 관리</option>
+				<option value="admin.account.level.manage">레벨/역할 변경</option>
+				<option value="admin.account.status.update">상태 변경</option>
+				<option value="admin.account.password.reset">비번 초기화</option>
+				<option value="admin.allowlist.manage">위임권한 관리</option>
+				<option value="admin.system.level_policy.manage">레벨정책 변경</option>
+				<option value="admin.page.manage">페이지 관리</option>
+			</select>
+			<input v-model="auditFilters.actor_id" placeholder="행위자 ID" class="px-3 py-2 border rounded text-sm" />
+			<input v-model="auditFilters.target_user_id" placeholder="대상 사용자 ID" class="px-3 py-2 border rounded text-sm" />
+			<input v-model="auditFilters.date_from" type="date" class="px-3 py-2 border rounded text-sm" />
+			<input v-model="auditFilters.date_to" type="date" class="px-3 py-2 border rounded text-sm" />
+			<select v-model.number="auditLimit" @change="loadAuditLogs(1)" class="px-3 py-2 border rounded text-sm">
+				<option :value="20">20</option>
+				<option :value="50">50</option>
+				<option :value="100">100</option>
+			</select>
+		</div>
+		<div class="overflow-x-auto">
+			<table class="w-full min-w-[980px] text-sm">
+				<thead>
+					<tr class="border-b bg-gray-50 text-xs">
+						<th class="py-2 px-3 text-left">시간</th>
+						<th class="py-2 px-3 text-left">행위자</th>
+						<th class="py-2 px-3 text-left">대상</th>
+						<th class="py-2 px-3 text-left">액션</th>
+						<th class="py-2 px-3 text-left">상태</th>
+						<th class="py-2 px-3 text-left">메시지</th>
+						<th class="py-2 px-3 text-left">상세</th>
+					</tr>
+				</thead>
+				<tbody>
+					<tr v-if="auditLoading">
+						<td colspan="7" class="py-6 text-center text-gray-500">불러오는 중...</td>
+					</tr>
+					<tr v-else-if="auditLogs.length === 0">
+						<td colspan="7" class="py-6 text-center text-gray-500">로그가 없습니다.</td>
+					</tr>
+					<template v-else v-for="log in auditLogs" :key="log.id">
+						<tr class="border-b">
+							<td class="py-2 px-3">{{ formatDateTime(log.created_at) }}</td>
+							<td class="py-2 px-3">{{ log.actor_id || '-' }}</td>
+							<td class="py-2 px-3">{{ log.target_user_id || '-' }}</td>
+							<td class="py-2 px-3">{{ permissionLabel(log.action) }}</td>
+							<td class="py-2 px-3">{{ log.status }}</td>
+							<td class="py-2 px-3">{{ log.message || '-' }}</td>
+							<td class="py-2 px-3"><button class="px-2 py-1 bg-gray-100 rounded text-xs" @click="toggleAudit(log.id)">{{ isAuditOpen(log.id) ? '닫기' : '보기' }}</button></td>
+						</tr>
+						<tr v-if="isAuditOpen(log.id)" class="bg-gray-50 border-b">
+							<td colspan="7" class="p-3">
+								<div class="grid md:grid-cols-2 gap-3">
+									<pre class="text-xs bg-white border rounded p-2 overflow-auto">{{ pretty(log.before_data) }}</pre>
+									<pre class="text-xs bg-white border rounded p-2 overflow-auto">{{ pretty(log.after_data) }}</pre>
+								</div>
+							</td>
+						</tr>
+					</template>
+				</tbody>
+			</table>
+		</div>
+	</section>
+
+	<div v-if="showAuthModal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" @click.self="showAuthModal=false">
+		<div class="bg-white rounded-xl p-5 w-full max-w-md space-y-3">
+			<h3 class="text-lg font-semibold">권한/레벨 설정</h3>
+			<select v-model="editAuthForm.auth_type" class="w-full px-3 py-2 border rounded" @change="onAuthTypeChange">
+				<option value="TA">최고관리자</option>
+				<option value="A">관리자</option>
+				<option value="M">매니저</option>
+				<option value="G">방문자</option>
+				<option value="U">일반 사용자</option>
+			</select>
+			<input type="number" v-model.number="editAuthForm.auth_level" min="0" max="10" :disabled="normalizeAuthType(editAuthForm.auth_type) === 'TA'" class="w-full px-3 py-2 border rounded disabled:bg-gray-100" />
+			<div class="flex gap-2"><button class="flex-1 px-3 py-2 bg-indigo-500 text-white rounded" @click="saveAuth">저장</button><button class="flex-1 px-3 py-2 bg-gray-200 rounded" @click="showAuthModal=false">취소</button></div>
+		</div>
+	</div>
 </div>
-
-<!-- 권한 수정 모달 -->
-<div v-if="showModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" @click.self="closeModal">
-    <div class="bg-white rounded-2xl p-6 w-full max-w-md animate-slideUp">
-        <h3 class="text-xl font-semibold mb-5">권한 수정</h3>
-        <div class="mb-4">
-            <label class="block mb-2 text-sm font-medium text-gray-700">권한 타입</label>
-            <select v-model="editForm.auth_type" class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:border-indigo-500">
-                <option value="U">일반 사용자</option>
-                <option value="A">관리자</option>
-            </select>
-        </div>
-        <div class="mb-5">
-            <label class="block mb-2 text-sm font-medium text-gray-700">권한 레벨 (1-10)</label>
-            <input
-                type="number"
-                v-model.number="editForm.auth_level"
-                min="1"
-                max="10"
-                class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:border-indigo-500"
-            >
-        </div>
-        <div class="flex gap-3">
-            <button @click="saveAuth" class="flex-1 px-4 py-3 bg-gradient-to-br from-indigo-500 to-purple-600 text-white rounded-xl font-semibold hover:opacity-90 transition">
-                저장
-            </button>
-            <button @click="closeModal" class="flex-1 px-4 py-3 bg-gray-200 text-gray-700 rounded-xl font-semibold hover:bg-gray-300 transition">
-                취소
-            </button>
-        </div>
-    </div>
-</div>
-
-<style>
-    @keyframes slideUp {
-        from {
-            opacity: 0;
-            transform: translateY(30px);
-        }
-        to {
-            opacity: 1;
-            transform: translateY(0);
-        }
-    }
-    .animate-slideUp {
-        animation: slideUp 0.3s ease;
-    }
-</style>
 
 <script>
-    const { createApp } = Vue;
+	const { createApp } = Vue;
+	const PERMISSION_LABELS = {
+		"admin.stats.read": "대시보드 조회",
+		"admin.account.read": "계정 조회",
+		"admin.account.profile.update": "계정 프로필 수정",
+		"admin.account.status.update": "계정 상태 변경",
+		"admin.account.password.reset": "비밀번호 초기화",
+		"admin.account.permission.manage": "권한 관리",
+		"admin.account.level.manage": "권한/레벨 변경",
+		"admin.account.delete": "계정 삭제",
+		"admin.allowlist.manage": "위임 가능 권한 관리",
+		"admin.audit.read": "감사 로그 조회",
+		"admin.page.manage": "관리자 페이지 관리",
+		"admin.system.level_policy.manage": "전역 레벨 정책 변경",
+		"admin.page.blogs.read": "블로그 페이지 조회",
+		"admin.page.blogs.create": "블로그 추가",
+		"admin.page.blogs.update": "블로그 수정",
+		"admin.page.blogs.delete": "블로그 삭제",
+		"admin.page.admin_chat.read": "채팅 조회",
+		"admin.page.admin_chat.create": "채팅 생성",
+		"admin.page.admin_chat.update": "채팅 수정",
+		"admin.page.admin_chat.delete": "채팅 삭제",
+		"system.bootstrap.super_admin.create": "최고관리자 생성"
+	};
+	const PERMISSION_ACTION_PRESET = ["admin.account.permission.manage", "admin.account.level.manage", "admin.account.status.update", "admin.account.password.reset", "admin.allowlist.manage", "admin.system.level_policy.manage", "admin.page.manage"].join(",");
 
-    createApp({
-        data() {
-            return {
-                users: [],
-                loading: true,
-                currentPage: 1,
-                totalPages: 1,
-                userTypeFilter: '',
-                showModal: false,
-                editForm: {
-                    user_id: '',
-                    auth_type: 'U',
-                    auth_level: 1
-                }
-            }
-        },
-        mounted() {
-            this.loadUsers();
-        },
-        methods: {
-            async loadUsers(page = 1) {
-                this.currentPage = page;
-                this.loading = true;
-
-                const url = `/api/admin/users?page=${page}&limit=20${this.userTypeFilter ? '&user_type=' + this.userTypeFilter : ''}`;
-
-                try {
-                    const data = await apiCall(url);
-
-                    if (data.success && data.data.users) {
-                        this.users = data.data.users;
-                        this.totalPages = Math.ceil(data.data.total / data.data.limit);
-                    } else {
-                        this.users = [];
-                        this.totalPages = 1;
-                    }
-                } catch (error) {
-                    console.error('사용자 로드 실패:', error);
-                    this.users = [];
-                } finally {
-                    this.loading = false;
-                }
-            },
-            openEditModal(user) {
-                this.editForm = {
-                    user_id: user.id,
-                    auth_type: user.auth_type,
-                    auth_level: user.auth_level
-                };
-                this.showModal = true;
-            },
-            closeModal() {
-                this.showModal = false;
-            },
-            async saveAuth() {
-                if (this.editForm.auth_level < 1 || this.editForm.auth_level > 10) {
-                    alert('권한 레벨은 1-10 사이여야 합니다');
-                    return;
-                }
-
-                try {
-                    const data = await apiCall(`/api/admin/users/${this.editForm.user_id}/auth`, {
-                        method: 'PUT',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({
-                            auth_type: this.editForm.auth_type,
-                            auth_level: this.editForm.auth_level
-                        })
-                    });
-
-                    if (data.success) {
-                        alert('권한이 수정되었습니다');
-                        this.closeModal();
-                        this.loadUsers(this.currentPage);
-                    } else {
-                        alert(data.error?.message || '수정에 실패했습니다');
-                    }
-                } catch (error) {
-                    alert('서버 오류가 발생했습니다');
-                }
-            },
-            async deleteUser(userId) {
-                if (!confirm(`사용자 "${userId}"를 삭제하시겠습니까?`)) {
-                    return;
-                }
-
-                try {
-                    const data = await apiCall(`/api/admin/users/${userId}`, {
-                        method: 'DELETE'
-                    });
-
-                    if (data.success) {
-                        alert('사용자가 삭제되었습니다');
-                        this.loadUsers(this.currentPage);
-                    } else {
-                        alert(data.error?.message || '삭제에 실패했습니다');
-                    }
-                } catch (error) {
-                    alert('서버 오류가 발생했습니다');
-                }
-            },
-            formatDate(dateString) {
-                return new Date(dateString).toLocaleDateString('ko-KR');
-            }
-        }
-    }).mount('#usersApp');
+	createApp({
+		data() {
+				return { ctx: window.ADMIN_CONTEXT, users: [], loading: true, currentPage: 1, totalPages: 1, userTypeFilter: "", levelPolicyEnabled: window.ADMIN_CONTEXT.levelPolicyEnabled !== false, levelPolicyLoading: false, selectedUser: null, allPermissions: [], permissionLoading: false, assignedPermissionSet: {}, draftPermissionSet: {}, allowlist: [], pages: [], pageLoading: false, newPage: { page_key: "", title: "", description: "", group_key: "custom", group_label: "기타", group_order: 90, visible_roles_csv: "TA,A", icon: "", sort_order: 100, enabled: true }, showAuthModal: false, editAuthForm: { user_id: "", auth_type: "U", auth_level: 1 }, permissionActionPreset: PERMISSION_ACTION_PRESET, auditFilters: { action: PERMISSION_ACTION_PRESET, actor_id: "", target_user_id: "", date_from: "", date_to: "" }, auditLogs: [], auditLoading: false, auditLimit: 20, auditOpen: {} };
+		},
+		computed: {
+			permissionDiff() {
+				const added = [];
+				const removed = [];
+				Object.keys(this.draftPermissionSet).forEach((c) => {
+					if (!this.assignedPermissionSet[c]) added.push(c);
+				});
+				Object.keys(this.assignedPermissionSet).forEach((c) => {
+					if (!this.draftPermissionSet[c]) removed.push(c);
+				});
+				return { added: added.sort(), removed: removed.sort() };
+			},
+			canEditSelectedPermissions() {
+				return this.permissionBlockReason === "";
+			},
+			canSavePermissionDraft() {
+				return this.canEditSelectedPermissions && (this.permissionDiff.added.length > 0 || this.permissionDiff.removed.length > 0);
+			},
+			permissionBlockReason() {
+				if (!this.selectedUser) return "먼저 대상을 선택하세요.";
+				if (!this.ctx.canPermissionManage) return "권한 관리 권한이 필요합니다.";
+				if (this.isSelf(this.selectedUser)) return "자기 계정 권한은 변경할 수 없습니다.";
+				if (!this.isAdminType(this.selectedUser.auth_type)) return "관리자 계정(TA/A/M/G)에서만 권한 부여가 가능합니다.";
+				if (!this.canManageHierarchy(this.selectedUser)) return "관리 가능한 계정 범위를 초과했습니다.";
+				return "";
+			}
+		},
+		async mounted() {
+			this.setDefaultAuditRange();
+			await this.loadLevelPolicy();
+			await this.loadPermissionCatalog();
+			await this.loadUsers();
+			if (this.ctx.canPageManage) await this.loadPages();
+			if (this.ctx.canAuditRead) await this.loadAuditLogs(1);
+		},
+		methods: {
+			toSet(codes) {
+				const out = {};
+				(codes || []).forEach((c) => {
+					c = String(c || "").trim();
+					if (c) out[c] = true;
+				});
+				return out;
+			},
+			setToArray(setObj) {
+				return Object.keys(setObj || {}).sort();
+			},
+			normalizeAuthType(authType) {
+				const t = String(authType || "")
+					.trim()
+					.toUpperCase();
+				return t === "AG" ? "G" : t;
+			},
+			isAdminType(authType) {
+				const t = this.normalizeAuthType(authType);
+				return t === "TA" || t === "A" || t === "M" || t === "G";
+			},
+			isTopAdminType(authType) {
+				return this.normalizeAuthType(authType) === "TA";
+			},
+			roleLabel(authType) {
+				const t = this.normalizeAuthType(authType);
+				return t === "TA" ? "최고관리자" : t === "A" ? "관리자" : t === "M" ? "매니저" : t === "G" ? "방문자" : t === "U" ? "일반 사용자" : t || "-";
+			},
+			isSelf(user) {
+				return user.id === this.ctx.userName;
+			},
+			canManageHierarchy(user) {
+				if (this.ctx.isSuperAdmin) return true;
+				const t = this.normalizeAuthType(user.auth_type);
+				if (!this.isAdminType(t)) return true;
+				if (this.isTopAdminType(t)) return false;
+				if (!this.levelPolicyEnabled) return true;
+				return Number(user.auth_level || 0) < Number(this.ctx.userLevel || 0);
+			},
+			canProfileUpdate(user) {
+				return this.ctx.canProfileUpdate && (!this.isAdminType(user.auth_type) || this.canManageHierarchy(user));
+			},
+			canStatusUpdate(user) {
+				return this.ctx.canStatusUpdate && !this.isSelf(user) && this.canManageHierarchy(user);
+			},
+			canPasswordReset(user) {
+				return this.ctx.canPasswordReset && (this.isSelf(user) || this.canManageHierarchy(user));
+			},
+			canLevelManage(user) {
+				return this.ctx.canLevelManage && this.ctx.isSuperAdmin && !this.isSelf(user);
+			},
+			canDeleteUser(user) {
+				return this.ctx.canDeleteUser && this.ctx.isSuperAdmin && !this.isSelf(user);
+			},
+			permissionLabel(code) {
+				const key = String(code || "").trim();
+				if (!key) return "-";
+				if (PERMISSION_LABELS[key]) return PERMISSION_LABELS[key];
+				if (key.startsWith("admin.page.")) {
+					const p = key.split(".");
+					if (p.length >= 4) {
+						const pageKey = p[2];
+						const action = p[3];
+						return action === "read" ? `페이지(${pageKey}) 조회` : action === "create" ? `페이지(${pageKey}) 추가` : action === "update" ? `페이지(${pageKey}) 수정` : action === "delete" ? `페이지(${pageKey}) 삭제` : key;
+					}
+				}
+				return key;
+			},
+			statusLabel(status) {
+				return (status || "active") === "locked" ? "잠금" : "활성";
+			},
+			toggleDraftPermission(code, checked) {
+				if (!this.canEditSelectedPermissions) return;
+				if (checked) {
+					this.draftPermissionSet = { ...this.draftPermissionSet, [code]: true };
+					return;
+				}
+				const next = { ...this.draftPermissionSet };
+				delete next[code];
+				this.draftPermissionSet = next;
+			},
+			async loadUsers(page = 1) {
+				this.currentPage = page;
+				this.loading = true;
+				try {
+					const q = `/api/admin/users?page=${page}&limit=20${this.userTypeFilter ? `&user_type=${this.userTypeFilter}` : ""}`;
+					const res = await window.apiCall(q);
+					if (res.success && res.data) {
+						this.users = res.data.users || [];
+						this.totalPages = Math.ceil((res.data.total || 0) / (res.data.limit || 20)) || 1;
+					} else {
+						this.users = [];
+						this.totalPages = 1;
+					}
+				} catch (_) {
+					this.users = [];
+					this.totalPages = 1;
+				}
+				this.loading = false;
+			},
+			async loadPermissionCatalog() {
+				if (!this.ctx.canAccountRead) return;
+				try {
+					const p = await window.apiCall("/api/admin/permissions");
+					this.allPermissions = p.success ? p.data.permissions || [] : [];
+				} catch (_) {
+					this.allPermissions = [];
+				}
+				if (!this.ctx.canAllowlistManage) return;
+				try {
+					const d = await window.apiCall("/api/admin/permissions/delegable");
+					this.allowlist = d.success ? d.data.permissions || [] : [];
+				} catch (_) {
+					this.allowlist = [];
+				}
+			},
+			async loadLevelPolicy() {
+				this.levelPolicyLoading = true;
+				try {
+					const res = await window.apiCall("/api/admin/level-policy");
+					if (res.success && res.data) {
+						this.levelPolicyEnabled = !!res.data.enabled;
+						this.ctx.levelPolicyEnabled = this.levelPolicyEnabled;
+					}
+				} catch (_) {
+					this.levelPolicyEnabled = this.ctx.levelPolicyEnabled !== false;
+				}
+				this.levelPolicyLoading = false;
+			},
+			async toggleLevelPolicy() {
+				if (!this.ctx.isSuperAdmin) return;
+				const nextEnabled = !this.levelPolicyEnabled;
+				if (!confirm(nextEnabled ? "레벨 정책을 활성화하시겠습니까?" : "레벨 정책을 비활성화하시겠습니까? (전역 반영)")) return;
+				this.levelPolicyLoading = true;
+				try {
+					const res = await window.apiCall("/api/admin/level-policy", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled: nextEnabled }) });
+					if (res.success) {
+						this.levelPolicyEnabled = nextEnabled;
+						this.ctx.levelPolicyEnabled = nextEnabled;
+						await this.refreshAudit();
+					} else {
+						alert(res.error?.message || "레벨 정책 변경에 실패했습니다.");
+					}
+				} catch (_) {
+					alert("레벨 정책 변경에 실패했습니다.");
+				}
+				this.levelPolicyLoading = false;
+			},
+			async selectUser(user) {
+				this.selectedUser = user;
+				this.permissionLoading = true;
+				this.assignedPermissionSet = {};
+				this.draftPermissionSet = {};
+				try {
+					if (this.isAdminType(user.auth_type)) {
+						const r = await window.apiCall(`/api/admin/users/${user.id}/permissions`);
+						if (r.success) {
+							this.assignedPermissionSet = this.toSet(r.data.permissions || []);
+							this.draftPermissionSet = { ...this.assignedPermissionSet };
+						}
+					}
+				} catch (_) {
+					alert("권한을 불러오지 못했습니다.");
+				}
+				this.permissionLoading = false;
+			},
+			async savePermissionDraft() {
+				if (!this.canSavePermissionDraft || !this.selectedUser) return;
+				try {
+					const permissions = this.setToArray(this.draftPermissionSet);
+					const r = await window.apiCall(`/api/admin/users/${this.selectedUser.id}/permissions`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ permissions }) });
+					if (r.success) {
+						this.assignedPermissionSet = { ...this.draftPermissionSet };
+						await this.refreshAudit();
+					} else {
+						alert(r.error?.message || "권한 수정 실패");
+					}
+				} catch (_) {
+					alert("권한 수정 실패");
+				}
+			},
+			async editProfile(user) {
+				const name = prompt("새 이름", user.name || "");
+				if (name === null) return;
+				const email = prompt("새 이메일", user.email || "");
+				if (email === null) return;
+				try {
+					const r = await window.apiCall(`/api/admin/users/${user.id}/profile`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, email }) });
+					if (r.success) {
+						await this.loadUsers(this.currentPage);
+						await this.refreshAudit();
+					} else {
+						alert(r.error?.message || "프로필 수정 실패");
+					}
+				} catch (_) {
+					alert("프로필 수정 실패");
+				}
+			},
+			async toggleStatus(user) {
+				const status = (user.status || "active") === "locked" ? "active" : "locked";
+				const label = status === "locked" ? "잠금" : "활성";
+				if (!confirm(`'${user.id}' 계정 상태를 '${label}'(으)로 변경하시겠습니까?`)) return;
+				try {
+					const r = await window.apiCall(`/api/admin/users/${user.id}/status`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) });
+					if (r.success) {
+						await this.loadUsers(this.currentPage);
+						await this.refreshAudit();
+					} else {
+						alert(r.error?.message || "상태 변경 실패");
+					}
+				} catch (_) {
+					alert("상태 변경 실패");
+				}
+			},
+			async resetPassword(user) {
+				const pw = prompt(`'${user.id}'의 새 비밀번호를 입력하세요 (최소 6자)`);
+				if (!pw) return;
+				try {
+					const r = await window.apiCall(`/api/admin/users/${user.id}/password-reset`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ new_password: pw }) });
+					if (r.success) {
+						await this.refreshAudit();
+					} else {
+						alert(r.error?.message || "비밀번호 초기화 실패");
+					}
+				} catch (_) {
+					alert("비밀번호 초기화 실패");
+				}
+			},
+			openAuthModal(user) {
+				this.editAuthForm = { user_id: user.id, auth_type: this.normalizeAuthType(user.auth_type), auth_level: Number(user.auth_level || 0) };
+				this.onAuthTypeChange();
+				this.showAuthModal = true;
+			},
+			onAuthTypeChange() {
+				const t = this.normalizeAuthType(this.editAuthForm.auth_type);
+				this.editAuthForm.auth_type = t;
+				if (t === "TA") {
+					this.editAuthForm.auth_level = 0;
+					return;
+				}
+				const next = Number(this.editAuthForm.auth_level || 1);
+				if (next < 1 || next > 10) this.editAuthForm.auth_level = 1;
+			},
+			async saveAuth() {
+				this.onAuthTypeChange();
+				try {
+					const payload = { auth_type: this.editAuthForm.auth_type, auth_level: Number(this.editAuthForm.auth_level || 0) };
+					const r = await window.apiCall(`/api/admin/users/${this.editAuthForm.user_id}/auth`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+					if (r.success) {
+						this.showAuthModal = false;
+						await this.loadUsers(this.currentPage);
+						await this.refreshAudit();
+					} else {
+						alert(r.error?.message || "권한/레벨 수정 실패");
+					}
+				} catch (_) {
+					alert("권한/레벨 수정 실패");
+				}
+			},
+			async deleteUser(user) {
+				if (!confirm(`'${user.id}' 사용자를 삭제하시겠습니까?`)) return;
+				try {
+					const r = await window.apiCall(`/api/admin/users/${user.id}`, { method: "DELETE" });
+					if (r.success) {
+						if (this.selectedUser && this.selectedUser.id === user.id) this.selectedUser = null;
+						await this.loadUsers(this.currentPage);
+						await this.refreshAudit();
+					} else {
+						alert(r.error?.message || "사용자 삭제 실패");
+					}
+				} catch (_) {
+					alert("사용자 삭제 실패");
+				}
+			},
+			async saveAllowlist() {
+				try {
+					const permissions = [...new Set((this.allowlist || []).map((v) => String(v).trim()).filter(Boolean))].sort();
+					const r = await window.apiCall("/api/admin/permissions/delegable", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ permissions }) });
+					if (r.success) {
+						this.allowlist = permissions;
+						await this.refreshAudit();
+					} else {
+						alert(r.error?.message || "위임 권한 저장 실패");
+					}
+				} catch (_) {
+					alert("위임 권한 저장 실패");
+				}
+			},
+			async loadPages() {
+				if (!this.ctx.canPageManage) return;
+				this.pageLoading = true;
+				try {
+					const res = await window.apiCall("/api/admin/pages?include_disabled=true");
+					this.pages = res.success ? res.data.pages || [] : [];
+				} catch (_) {
+					this.pages = [];
+				}
+				this.pageLoading = false;
+			},
+				async createPage() {
+					if (!this.ctx.canPageManage) return;
+					if (!this.newPage.page_key || !this.newPage.title) {
+						alert("page_key와 title은 필수입니다.");
+						return;
+					}
+					try {
+						const visibleRoles = String(this.newPage.visible_roles_csv || "")
+							.split(",")
+							.map((value) => String(value || "").trim().toUpperCase())
+							.filter(Boolean);
+						const payload = {
+							page_key: this.newPage.page_key,
+							title: this.newPage.title,
+							description: this.newPage.description,
+							group_key: this.newPage.group_key,
+							group_label: this.newPage.group_label,
+							group_order: Number(this.newPage.group_order || 90),
+							visible_roles: visibleRoles,
+							icon: this.newPage.icon,
+							sort_order: Number(this.newPage.sort_order || 100),
+							enabled: !!this.newPage.enabled
+						};
+						const res = await window.apiCall("/api/admin/pages", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+						if (!res.success) {
+							alert(res.error?.message || "페이지 생성 실패");
+							return;
+						}
+						this.newPage = { page_key: "", title: "", description: "", group_key: "custom", group_label: "기타", group_order: 90, visible_roles_csv: "TA,A", icon: "", sort_order: 100, enabled: true };
+						await this.loadPages();
+						await this.loadPermissionCatalog();
+						await this.refreshAudit();
+					} catch (_) {
+					alert("페이지 생성 실패");
+				}
+			},
+			async togglePageEnabled(page) {
+				if (!this.ctx.canPageManage || !page) return;
+				try {
+					const res = await window.apiCall(`/api/admin/pages/${page.page_key}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled: !page.enabled }) });
+					if (!res.success) {
+						alert(res.error?.message || "페이지 상태 변경 실패");
+						return;
+					}
+					await this.loadPages();
+					await this.refreshAudit();
+				} catch (_) {
+					alert("페이지 상태 변경 실패");
+				}
+			},
+			async deletePageItem(page) {
+				if (!this.ctx.canPageManage || !page || page.builtin) return;
+				if (!confirm(`페이지 '${page.page_key}'를 삭제하시겠습니까?`)) return;
+				try {
+					const res = await window.apiCall(`/api/admin/pages/${page.page_key}`, { method: "DELETE" });
+					if (!res.success) {
+						alert(res.error?.message || "페이지 삭제 실패");
+						return;
+					}
+					await this.loadPages();
+					await this.loadPermissionCatalog();
+					await this.refreshAudit();
+				} catch (_) {
+					alert("페이지 삭제 실패");
+				}
+			},
+			setDefaultAuditRange() {
+				const to = new Date();
+				const from = new Date();
+				from.setDate(to.getDate() - 6);
+				this.auditFilters.date_from = this.dateInput(from);
+				this.auditFilters.date_to = this.dateInput(to);
+			},
+			dateInput(d) {
+				return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+			},
+			async loadAuditLogs(page = 1) {
+				if (!this.ctx.canAuditRead) return;
+				this.auditLoading = true;
+				try {
+					const p = new URLSearchParams({ page: String(page), limit: String(this.auditLimit) });
+					if (this.auditFilters.action) p.set("action", this.auditFilters.action);
+					if (this.auditFilters.actor_id.trim()) p.set("actor_id", this.auditFilters.actor_id.trim());
+					if (this.auditFilters.target_user_id.trim()) p.set("target_user_id", this.auditFilters.target_user_id.trim());
+					if (this.auditFilters.date_from) p.set("date_from", this.auditFilters.date_from);
+					if (this.auditFilters.date_to) p.set("date_to", this.auditFilters.date_to);
+					const r = await window.apiCall(`/api/admin/audit-logs?${p.toString()}`);
+					this.auditLogs = r.success && r.data ? r.data.logs || [] : [];
+					this.auditOpen = {};
+				} catch (_) {
+					this.auditLogs = [];
+				}
+				this.auditLoading = false;
+			},
+			resetAuditFilters() {
+				this.auditFilters.action = this.permissionActionPreset;
+				this.auditFilters.actor_id = "";
+				this.auditFilters.target_user_id = "";
+				this.setDefaultAuditRange();
+				this.loadAuditLogs(1);
+			},
+			toggleAudit(id) {
+				this.auditOpen = { ...this.auditOpen, [id]: !this.auditOpen[id] };
+			},
+			isAuditOpen(id) {
+				return !!this.auditOpen[id];
+			},
+			pretty(v) {
+				try {
+					return JSON.stringify(v || {}, null, 2);
+				} catch (_) {
+					return "{}";
+				}
+			},
+			async refreshAudit() {
+				if (this.ctx.canAuditRead) await this.loadAuditLogs(1);
+			},
+			formatDate(v) {
+				return v ? new Date(v).toLocaleDateString("ko-KR") : "-";
+			},
+			formatDateTime(v) {
+				return v ? new Date(v).toLocaleString("ko-KR") : "-";
+			}
+		}
+	}).mount("#usersApp");
 </script>
-{{end}}
+[[end]]

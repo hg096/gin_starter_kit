@@ -15,14 +15,175 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
-        "/api/admin/stats": {
+        "/api/admin/audit-logs": {
             "get": {
                 "security": [
                     {
                         "BearerAuth": []
                     }
                 ],
-                "description": "전체 사용자, 블로그 등의 통계를 조회합니다",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "List admin audit logs",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "page",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 20,
+                        "description": "limit (max 100)",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "action filter",
+                        "name": "action",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "actor id filter",
+                        "name": "actor_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "target user id filter",
+                        "name": "target_user_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "start date (YYYY-MM-DD)",
+                        "name": "date_from",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "end date (YYYY-MM-DD)",
+                        "name": "date_to",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/admin.AdminAuditLogListResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/admin/blogs": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "List blogs (admin)",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "page",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 20,
+                        "description": "limit (max 100)",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/admin.AdminBlogListResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "consumes": [
                     "application/json"
                 ],
@@ -32,7 +193,617 @@ const docTemplate = `{
                 "tags": [
                     "admin"
                 ],
-                "summary": "통계 조회 (관리자)",
+                "summary": "Create blog (admin)",
+                "parameters": [
+                    {
+                        "description": "create blog payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/admin.AdminCreateBlogRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/admin/blogs/{id}": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Update blog (admin)",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "blog id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "update blog payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/admin.AdminUpdateBlogRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Delete blog (admin)",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "blog id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/admin/bootstrap/status": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Get super-admin bootstrap status",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/admin.AdminBootstrapStatusResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/api/admin/bootstrap/super-admin": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Bootstrap super-admin account",
+                "parameters": [
+                    {
+                        "description": "bootstrap payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/admin.AdminBootstrapSuperAdminRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/admin/level-policy": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Get global level policy",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/admin.AdminLevelPolicyResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Update global level policy (top-admin)",
+                "parameters": [
+                    {
+                        "description": "level policy payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/admin.AdminUpdateLevelPolicyRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/admin/pages": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "List admin pages",
+                "parameters": [
+                    {
+                        "type": "boolean",
+                        "description": "include disabled pages",
+                        "name": "include_disabled",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Create admin page",
+                "parameters": [
+                    {
+                        "description": "admin page payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/admin.AdminCreatePageRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/admin/pages/{page_key}": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Update admin page",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "page key",
+                        "name": "page_key",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "admin page payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/admin.AdminUpdatePageRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Delete admin page",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "page key",
+                        "name": "page_key",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/admin/permissions": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "List available permissions",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/admin/permissions/delegable": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Get delegable permissions",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Update delegable permissions (super-admin)",
+                "parameters": [
+                    {
+                        "description": "delegable permissions payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/admin.AdminUpdateDelegablePermissionsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/admin/stats": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Get admin stats",
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -62,7 +833,6 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "모든 사용자 목록을 조회합니다 (관리자 전용)",
                 "consumes": [
                     "application/json"
                 ],
@@ -72,23 +842,23 @@ const docTemplate = `{
                 "tags": [
                     "admin"
                 ],
-                "summary": "사용자 목록 조회 (관리자)",
+                "summary": "List users (admin)",
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "페이지 번호 (기본: 1)",
+                        "description": "page",
                         "name": "page",
                         "in": "query"
                     },
                     {
                         "type": "integer",
-                        "description": "페이지 크기 (기본: 20)",
+                        "description": "limit",
                         "name": "limit",
                         "in": "query"
                     },
                     {
                         "type": "string",
-                        "description": "사용자 타입 (U, A)",
+                        "description": "user type filter",
                         "name": "user_type",
                         "in": "query"
                     }
@@ -134,7 +904,6 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "특정 사용자의 상세 정보를 조회합니다",
                 "consumes": [
                     "application/json"
                 ],
@@ -144,11 +913,11 @@ const docTemplate = `{
                 "tags": [
                     "admin"
                 ],
-                "summary": "사용자 상세 조회 (관리자)",
+                "summary": "Get user (admin)",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "사용자 ID",
+                        "description": "user id",
                         "name": "id",
                         "in": "path",
                         "required": true
@@ -175,7 +944,6 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "사용자를 삭제합니다",
                 "consumes": [
                     "application/json"
                 ],
@@ -185,11 +953,11 @@ const docTemplate = `{
                 "tags": [
                     "admin"
                 ],
-                "summary": "사용자 삭제 (관리자)",
+                "summary": "Delete user (super-admin)",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "사용자 ID",
+                        "description": "user id",
                         "name": "id",
                         "in": "path",
                         "required": true
@@ -218,7 +986,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "사용자의 권한 타입과 레벨을 수정합니다",
+                "description": "Updates user auth type and auth level.",
                 "consumes": [
                     "application/json"
                 ],
@@ -228,17 +996,17 @@ const docTemplate = `{
                 "tags": [
                     "admin"
                 ],
-                "summary": "사용자 권한 수정 (관리자)",
+                "summary": "Update user auth (super-admin)",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "사용자 ID",
+                        "description": "user id",
                         "name": "id",
                         "in": "path",
                         "required": true
                     },
                     {
-                        "description": "권한 정보",
+                        "description": "auth payload",
                         "name": "request",
                         "in": "body",
                         "required": true,
@@ -269,9 +1037,220 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/admin/users/{id}/password-reset": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Reset user password (admin)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "user id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "password payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/admin.AdminResetUserPasswordRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/admin/users/{id}/permissions": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Get user permissions (admin)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "user id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Update user permissions (admin)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "user id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "permissions payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/admin.AdminUpdateUserPermissionsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/admin/users/{id}/profile": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Update user profile (admin)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "user id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "profile payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/admin.AdminUpdateUserProfileRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/admin/users/{id}/status": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Update user status (admin)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "user id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "status payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/admin.AdminUpdateUserStatusRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            }
+        },
         "/api/blog": {
             "get": {
-                "description": "블로그 글 목록을 페이지네이션으로 조회합니다",
+                "description": "블로그 글 목록을 페이지네이션으로 조회합니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -329,7 +1308,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "새로운 블로그 글을 작성합니다",
+                "description": "새로운 블로그 글을 작성합니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -387,7 +1366,7 @@ const docTemplate = `{
         },
         "/api/blog/author/{author_id}": {
             "get": {
-                "description": "특정 작성자의 블로그 글 목록을 조회합니다",
+                "description": "특정 작성자의 블로그 글 목록을 조회합니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -449,7 +1428,7 @@ const docTemplate = `{
         },
         "/api/blog/{id}": {
             "get": {
-                "description": "ID로 블로그 글을 조회합니다",
+                "description": "ID로 블로그 글을 조회합니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -502,7 +1481,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "자신의 블로그 글을 수정합니다",
+                "description": "자신의 블로그 글을 수정합니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -582,7 +1561,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "자신의 블로그 글을 삭제합니다",
+                "description": "자신의 블로그 글을 삭제합니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -673,7 +1652,7 @@ const docTemplate = `{
             "post": {
                 "security": [
                     {
-                        "Bearer": []
+                        "BearerAuth": []
                     }
                 ],
                 "produces": [
@@ -697,7 +1676,7 @@ const docTemplate = `{
             "get": {
                 "security": [
                     {
-                        "Bearer": []
+                        "BearerAuth": []
                     }
                 ],
                 "produces": [
@@ -719,7 +1698,7 @@ const docTemplate = `{
             "put": {
                 "security": [
                     {
-                        "Bearer": []
+                        "BearerAuth": []
                     }
                 ],
                 "consumes": [
@@ -770,7 +1749,6 @@ const docTemplate = `{
                         "description": "리프레시 토큰",
                         "name": "body",
                         "in": "body",
-                        "required": true,
                         "schema": {
                             "$ref": "#/definitions/user.RefreshTokenRequest"
                         }
@@ -826,7 +1804,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "특정 방의 접속자 목록과 정보를 조회합니다",
+                "description": "Returns clients connected to a specific room",
                 "consumes": [
                     "application/json"
                 ],
@@ -836,11 +1814,11 @@ const docTemplate = `{
                 "tags": [
                     "websocket"
                 ],
-                "summary": "방 정보 조회",
+                "summary": "Get websocket room info",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "방 ID",
+                        "description": "room id",
                         "name": "room_id",
                         "in": "path",
                         "required": true
@@ -863,7 +1841,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "전체 방 개수와 접속자 수를 조회합니다",
+                "description": "Returns total room and client counts",
                 "consumes": [
                     "application/json"
                 ],
@@ -873,7 +1851,7 @@ const docTemplate = `{
                 "tags": [
                     "websocket"
                 ],
-                "summary": "WebSocket 통계",
+                "summary": "Get websocket stats",
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -891,15 +1869,15 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "실시간 채팅을 위한 WebSocket 연결",
+                "description": "WebSocket endpoint for room-based chat",
                 "tags": [
                     "websocket"
                 ],
-                "summary": "채팅 WebSocket",
+                "summary": "Chat websocket",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "방 ID",
+                        "description": "room id",
                         "name": "room_id",
                         "in": "query",
                         "required": true
@@ -914,6 +1892,170 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "admin.AdminAuditLogItem": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string"
+                },
+                "actor_id": {
+                    "type": "string"
+                },
+                "after_data": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "before_data": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "ip_addr": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "target_user_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "admin.AdminAuditLogListResponse": {
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": "integer"
+                },
+                "logs": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/admin.AdminAuditLogItem"
+                    }
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "admin.AdminBlogListResponse": {
+            "type": "object",
+            "properties": {
+                "blogs": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/blog.Blog"
+                    }
+                },
+                "limit": {
+                    "type": "integer"
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "admin.AdminBootstrapStatusResponse": {
+            "type": "object",
+            "properties": {
+                "admin_count": {
+                    "type": "integer"
+                },
+                "can_bootstrap": {
+                    "type": "boolean"
+                },
+                "reason": {
+                    "type": "string"
+                },
+                "super_admin_count": {
+                    "type": "integer"
+                }
+            }
+        },
+        "admin.AdminBootstrapSuperAdminRequest": {
+            "type": "object",
+            "properties": {
+                "user_email": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "string"
+                },
+                "user_name": {
+                    "type": "string"
+                },
+                "user_pass": {
+                    "type": "string"
+                }
+            }
+        },
+        "admin.AdminCreateBlogRequest": {
+            "type": "object",
+            "properties": {
+                "author_id": {
+                    "type": "string"
+                },
+                "content": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "admin.AdminCreatePageRequest": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "icon": {
+                    "type": "string"
+                },
+                "page_key": {
+                    "type": "string"
+                },
+                "sort_order": {
+                    "type": "integer"
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "admin.AdminLevelPolicyResponse": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "admin.AdminResetUserPasswordRequest": {
+            "type": "object",
+            "properties": {
+                "new_password": {
+                    "type": "string"
+                }
+            }
+        },
         "admin.AdminStatsResponse": {
             "type": "object",
             "properties": {
@@ -931,15 +2073,93 @@ const docTemplate = `{
                 }
             }
         },
+        "admin.AdminUpdateBlogRequest": {
+            "type": "object",
+            "properties": {
+                "content": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "admin.AdminUpdateDelegablePermissionsRequest": {
+            "type": "object",
+            "properties": {
+                "permissions": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "admin.AdminUpdateLevelPolicyRequest": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "admin.AdminUpdatePageRequest": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "icon": {
+                    "type": "string"
+                },
+                "sort_order": {
+                    "type": "integer"
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
         "admin.AdminUpdateUserAuthRequest": {
             "type": "object",
             "properties": {
                 "auth_level": {
-                    "description": "1-10",
                     "type": "integer"
                 },
                 "auth_type": {
-                    "description": "U, A",
+                    "type": "string"
+                }
+            }
+        },
+        "admin.AdminUpdateUserPermissionsRequest": {
+            "type": "object",
+            "properties": {
+                "permissions": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "admin.AdminUpdateUserProfileRequest": {
+            "type": "object",
+            "properties": {
+                "email": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "admin.AdminUpdateUserStatusRequest": {
+            "type": "object",
+            "properties": {
+                "status": {
                     "type": "string"
                 }
             }
@@ -1116,9 +2336,6 @@ const docTemplate = `{
         },
         "user.RefreshTokenRequest": {
             "type": "object",
-            "required": [
-                "refresh_token"
-            ],
             "properties": {
                 "refresh_token": {
                     "type": "string"
@@ -1159,12 +2376,15 @@ const docTemplate = `{
                 },
                 "name": {
                     "type": "string"
+                },
+                "status": {
+                    "type": "string"
                 }
             }
         }
     },
     "securityDefinitions": {
-        "Bearer": {
+        "BearerAuth": {
             "type": "apiKey",
             "name": "Authorization",
             "in": "header"

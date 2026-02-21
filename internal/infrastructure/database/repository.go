@@ -243,7 +243,10 @@ func (r *Repository) Exists(table string, where string, whereArgs ...interface{}
 
 // Count 레코드 개수 조회
 func (r *Repository) Count(table string, where string, whereArgs ...interface{}) (int64, error) {
-	query := fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE %s", table, where)
+	query := fmt.Sprintf("SELECT COUNT(*) FROM %s", table)
+	if strings.TrimSpace(where) != "" {
+		query = fmt.Sprintf("%s WHERE %s", query, where)
+	}
 
 	var count int64
 	err := r.QueryRow(query, whereArgs...).Scan(&count)

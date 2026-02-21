@@ -15,7 +15,7 @@ Clean Architecture 기반 Gin 웹 API 스타터 킷입니다. 코드 재사용�
 
 ### 개발 환경
 ```bash
-# 서버 실행
+# 서버 실행 !!!!
 go run cmd/server/main.go
 
 # 빌드
