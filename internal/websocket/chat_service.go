@@ -6,6 +6,7 @@ import (
 	"fmt"
 	appErrors "gin_starter/pkg/errors"
 	"gin_starter/pkg/logger"
+	"gin_starter/pkg/utils"
 	"sort"
 	"strings"
 	"sync"
@@ -251,7 +252,7 @@ func buildDirectRoomKey(userA, userB string) string {
 }
 
 func normalizeRoomKeyPart(value string) string {
-	value = strings.ToLower(strings.TrimSpace(value))
+	value = utils.TrimLower(value)
 	if value == "" {
 		return "unknown"
 	}

@@ -2,32 +2,39 @@ package blog
 
 import (
 	"database/sql"
-	"gin_starter/internal/infrastructure/database"
+	"gin_starter/pkg/db/database"
+	"gin_starter/pkg/utils"
 	"time"
 )
 
 // Repository 블로그 저장소 인터페이스
 type Repository interface {
+	Tx(tx *sql.Tx) Repository
 	Create(blog *Blog) error
-	CreateTx(tx *sql.Tx, blog *Blog) error
 	FindByID(id int64) (*Blog, error)
 	FindAll(page, limit int) ([]Blog, int64, error)
 	FindByAuthorID(authorID string, page, limit int) ([]Blog, int64, error)
 	Update(id int64, updates map[string]interface{}) error
-	UpdateTx(tx *sql.Tx, id int64, updates map[string]interface{}) error
 	Delete(id int64) error
-	DeleteTx(tx *sql.Tx, id int64) error
 	Exists(id int64) (bool, error)
 }
 
 type repository struct {
 	base *database.Repository
+	tx   *database.TxRepository
 }
 
 // NewRepository 블로그 저장소 생성
 func NewRepository(db *database.DB) Repository {
 	return &repository{
 		base: database.NewRepository(db),
+	}
+}
+
+func (r *repository) Tx(tx *sql.Tx) Repository {
+	return &repository{
+		base: r.base,
+		tx:   r.base.Tx(tx),
 	}
 }
 
@@ -41,25 +48,7 @@ func (r *repository) Create(blog *Blog) error {
 		"updated_at": time.Now(),
 	}
 
-	id, err := r.base.Insert("_blog", data)
-	if err != nil {
-		return err
-	}
-	blog.ID = id
-	return nil
-}
-
-// CreateTx 트랜잭션으로 블로그 생성
-func (r *repository) CreateTx(tx *sql.Tx, blog *Blog) error {
-	data := map[string]interface{}{
-		"title":      blog.Title,
-		"content":    blog.Content,
-		"author_id":  blog.AuthorID,
-		"created_at": time.Now(),
-		"updated_at": time.Now(),
-	}
-
-	id, err := r.base.InsertTx(tx, "_blog", data)
+	id, err := r.insert("_blog", data)
 	if err != nil {
 		return err
 	}
@@ -87,7 +76,7 @@ func (r *repository) FindByID(id int64) (*Blog, error) {
 
 // FindAll 모든 블로그 조회 (페이지네이션)
 func (r *repository) FindAll(page, limit int) ([]Blog, int64, error) {
-	offset := (page - 1) * limit
+	pagination := utils.NewPagination(page, limit, 20, 100)
 
 	// 전체 개수 조회
 	total, err := r.base.Count("_blog", "")
@@ -103,7 +92,7 @@ func (r *repository) FindAll(page, limit int) ([]Blog, int64, error) {
 		LIMIT ? OFFSET ?
 	`
 
-	rows, err := r.base.Query(query, limit, offset)
+	rows, err := r.base.Query(query, pagination.Limit, pagination.Offset)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -124,7 +113,7 @@ func (r *repository) FindAll(page, limit int) ([]Blog, int64, error) {
 
 // FindByAuthorID 작성자 ID로 블로그 목록 조회
 func (r *repository) FindByAuthorID(authorID string, page, limit int) ([]Blog, int64, error) {
-	offset := (page - 1) * limit
+	pagination := utils.NewPagination(page, limit, 20, 100)
 
 	// 전체 개수 조회
 	total, err := r.base.Count("_blog", "author_id = ?", authorID)
@@ -141,7 +130,7 @@ func (r *repository) FindByAuthorID(authorID string, page, limit int) ([]Blog, i
 		LIMIT ? OFFSET ?
 	`
 
-	rows, err := r.base.Query(query, authorID, limit, offset)
+	rows, err := r.base.Query(query, authorID, pagination.Limit, pagination.Offset)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -163,30 +152,38 @@ func (r *repository) FindByAuthorID(authorID string, page, limit int) ([]Blog, i
 // Update 블로그 수정
 func (r *repository) Update(id int64, updates map[string]interface{}) error {
 	updates["updated_at"] = time.Now()
-	_, err := r.base.Update("_blog", updates, "id = ?", id)
-	return err
-}
-
-// UpdateTx 트랜잭션으로 블로그 수정
-func (r *repository) UpdateTx(tx *sql.Tx, id int64, updates map[string]interface{}) error {
-	updates["updated_at"] = time.Now()
-	_, err := r.base.UpdateTx(tx, "_blog", updates, "id = ?", id)
+	_, err := r.update("_blog", updates, "id = ?", id)
 	return err
 }
 
 // Delete 블로그 삭제
 func (r *repository) Delete(id int64) error {
-	_, err := r.base.Delete("_blog", "id = ?", id)
-	return err
-}
-
-// DeleteTx 트랜잭션으로 블로그 삭제
-func (r *repository) DeleteTx(tx *sql.Tx, id int64) error {
-	_, err := r.base.DeleteTx(tx, "_blog", "id = ?", id)
+	_, err := r.delete("_blog", "id = ?", id)
 	return err
 }
 
 // Exists 블로그 존재 여부 확인
 func (r *repository) Exists(id int64) (bool, error) {
 	return r.base.Exists("_blog", "id = ?", id)
+}
+
+func (r *repository) insert(table string, data map[string]interface{}) (int64, error) {
+	if r.tx != nil {
+		return r.tx.Insert(table, data)
+	}
+	return r.base.Insert(table, data)
+}
+
+func (r *repository) update(table string, data map[string]interface{}, where string, whereArgs ...interface{}) (int64, error) {
+	if r.tx != nil {
+		return r.tx.Update(table, data, where, whereArgs...)
+	}
+	return r.base.Update(table, data, where, whereArgs...)
+}
+
+func (r *repository) delete(table string, where string, whereArgs ...interface{}) (int64, error) {
+	if r.tx != nil {
+		return r.tx.Delete(table, where, whereArgs...)
+	}
+	return r.base.Delete(table, where, whereArgs...)
 }

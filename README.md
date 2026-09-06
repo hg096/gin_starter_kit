@@ -339,7 +339,7 @@ func (h *Handler) CreateBlog(c *gin.Context) {
 ### Step 5: Routes 등록
 
 ```go
-// api/routes/routes.go 에 추가
+// internal/api/routes/routes.go 에 추가
 
 import "gin_starter/internal/domain/blog"
 

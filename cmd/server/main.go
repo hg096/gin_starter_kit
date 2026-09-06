@@ -2,10 +2,10 @@ package main
 
 import (
 	"context"
-	"gin_starter/api/routes"
+	"gin_starter/internal/api/routes"
 	"gin_starter/internal/config"
-	"gin_starter/internal/infrastructure/database"
 	"gin_starter/internal/websocket"
+	"gin_starter/pkg/db/database"
 	"gin_starter/pkg/logger"
 	"net/http"
 	"os"

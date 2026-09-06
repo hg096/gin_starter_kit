@@ -4,7 +4,7 @@ import (
 	"gin_starter/internal/config"
 	"gin_starter/internal/domain/blog"
 	"gin_starter/internal/domain/user"
-	"gin_starter/internal/middleware"
+	"gin_starter/pkg/middleware"
 	"net/http"
 	"net/http/httptest"
 	"strings"

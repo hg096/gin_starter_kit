@@ -2,28 +2,26 @@ package user
 
 import (
 	"database/sql"
-	"gin_starter/internal/infrastructure/database"
 	"gin_starter/pkg/authz"
+	"gin_starter/pkg/db/database"
 	"gin_starter/pkg/errors"
 	"gin_starter/pkg/logger"
+	"gin_starter/pkg/utils"
 	"strings"
 	"time"
 )
 
 // Repository defines user persistence APIs.
 type Repository interface {
+	Tx(tx *sql.Tx) Repository
 	Create(user *User) error
-	CreateTx(tx *sql.Tx, user *User) error
 	FindByID(id string) (*User, error)
 	FindByEmail(email string) (*User, error)
 	FindAuthSnapshotByID(id string) (*AuthSnapshot, error)
 	Update(id string, updates map[string]interface{}) error
-	UpdateTx(tx *sql.Tx, id string, updates map[string]interface{}) error
 	Delete(id string) error
-	DeleteTx(tx *sql.Tx, id string) error
 	Exists(id string) (bool, error)
 	UpdateRefreshToken(id string, refreshToken string) error
-	UpdateRefreshTokenTx(tx *sql.Tx, id string, refreshToken string) error
 	UpdateStatus(id string, status string) error
 	BumpTokenValidAfter(id string, at time.Time) error
 	GetLevelPolicyEnabled() (bool, error)
@@ -31,11 +29,19 @@ type Repository interface {
 
 type repository struct {
 	base *database.Repository
+	tx   *database.TxRepository
 }
 
 // NewRepository creates a user repository.
 func NewRepository(db *database.DB) Repository {
 	return &repository{base: database.NewRepository(db)}
+}
+
+func (r *repository) Tx(tx *sql.Tx) Repository {
+	return &repository{
+		base: r.base,
+		tx:   r.base.Tx(tx),
+	}
 }
 
 func (r *repository) Create(user *User) error {
@@ -49,29 +55,9 @@ func (r *repository) Create(user *User) error {
 		"u_status":     normalizeStatus(user.Status),
 	}
 
-	_, err := r.base.Insert("_user", data)
+	_, err := r.insert("_user", data)
 	if err != nil {
 		logger.Error("failed to create user: %v", err)
-		return errors.Wrap(err, "USER_CREATE_FAILED", "failed to create user")
-	}
-
-	return nil
-}
-
-func (r *repository) CreateTx(tx *sql.Tx, user *User) error {
-	data := map[string]interface{}{
-		"u_id":         user.ID,
-		"u_pass":       user.Password,
-		"u_name":       user.Name,
-		"u_email":      user.Email,
-		"u_auth_type":  user.AuthType,
-		"u_auth_level": user.AuthLevel,
-		"u_status":     normalizeStatus(user.Status),
-	}
-
-	_, err := r.base.InsertTx(tx, "_user", data)
-	if err != nil {
-		logger.Error("failed to create user (tx): %v", err)
 		return errors.Wrap(err, "USER_CREATE_FAILED", "failed to create user")
 	}
 
@@ -140,7 +126,7 @@ func (r *repository) FindAuthSnapshotByID(id string) (*AuthSnapshot, error) {
 }
 
 func (r *repository) Update(id string, updates map[string]interface{}) error {
-	affected, err := r.base.Update("_user", updates, "u_id = ?", id)
+	affected, err := r.update("_user", updates, "u_id = ?", id)
 	if err != nil {
 		logger.Error("failed to update user (%s): %v", id, err)
 		return errors.Wrap(err, "USER_UPDATE_FAILED", "failed to update user")
@@ -152,36 +138,10 @@ func (r *repository) Update(id string, updates map[string]interface{}) error {
 	return nil
 }
 
-func (r *repository) UpdateTx(tx *sql.Tx, id string, updates map[string]interface{}) error {
-	affected, err := r.base.UpdateTx(tx, "_user", updates, "u_id = ?", id)
-	if err != nil {
-		logger.Error("failed to update user (tx, %s): %v", id, err)
-		return errors.Wrap(err, "USER_UPDATE_FAILED", "failed to update user")
-	}
-	if affected == 0 {
-		return errors.ErrUserNotFound
-	}
-
-	return nil
-}
-
 func (r *repository) Delete(id string) error {
-	affected, err := r.base.Delete("_user", "u_id = ?", id)
+	affected, err := r.delete("_user", "u_id = ?", id)
 	if err != nil {
 		logger.Error("failed to delete user (%s): %v", id, err)
-		return errors.Wrap(err, "USER_DELETE_FAILED", "failed to delete user")
-	}
-	if affected == 0 {
-		return errors.ErrUserNotFound
-	}
-
-	return nil
-}
-
-func (r *repository) DeleteTx(tx *sql.Tx, id string) error {
-	affected, err := r.base.DeleteTx(tx, "_user", "u_id = ?", id)
-	if err != nil {
-		logger.Error("failed to delete user (tx, %s): %v", id, err)
 		return errors.Wrap(err, "USER_DELETE_FAILED", "failed to delete user")
 	}
 	if affected == 0 {
@@ -204,11 +164,6 @@ func (r *repository) Exists(id string) (bool, error) {
 func (r *repository) UpdateRefreshToken(id string, refreshToken string) error {
 	updates := map[string]interface{}{"u_re_token": refreshToken}
 	return r.Update(id, updates)
-}
-
-func (r *repository) UpdateRefreshTokenTx(tx *sql.Tx, id string, refreshToken string) error {
-	updates := map[string]interface{}{"u_re_token": refreshToken}
-	return r.UpdateTx(tx, id, updates)
 }
 
 func (r *repository) UpdateStatus(id string, status string) error {
@@ -235,7 +190,7 @@ func (r *repository) GetLevelPolicyEnabled() (bool, error) {
 		return false, errors.Wrap(err, "DATABASE_ERROR", "failed to read level policy setting")
 	}
 
-	value := strings.ToLower(strings.TrimSpace(raw.String))
+	value := utils.TrimLower(raw.String)
 	switch value {
 	case "", "1", "true", "on", "yes", "y":
 		return true, nil
@@ -244,6 +199,27 @@ func (r *repository) GetLevelPolicyEnabled() (bool, error) {
 	default:
 		return true, nil
 	}
+}
+
+func (r *repository) insert(table string, data map[string]interface{}) (int64, error) {
+	if r.tx != nil {
+		return r.tx.Insert(table, data)
+	}
+	return r.base.Insert(table, data)
+}
+
+func (r *repository) update(table string, data map[string]interface{}, where string, whereArgs ...interface{}) (int64, error) {
+	if r.tx != nil {
+		return r.tx.Update(table, data, where, whereArgs...)
+	}
+	return r.base.Update(table, data, where, whereArgs...)
+}
+
+func (r *repository) delete(table string, where string, whereArgs ...interface{}) (int64, error) {
+	if r.tx != nil {
+		return r.tx.Delete(table, where, whereArgs...)
+	}
+	return r.base.Delete(table, where, whereArgs...)
 }
 
 func scanUser(scanner interface {

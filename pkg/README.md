@@ -458,7 +458,7 @@ touch pkg/cache/README.md
    ```go
    // ❌ 나쁜 예 - 의존성 과다
    import "gin_starter/internal/domain/user"
-   import "gin_starter/internal/infrastructure/database"
+   import "gin_starter/pkg/db/database"
    ```
 
 ---

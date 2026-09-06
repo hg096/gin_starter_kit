@@ -1,0 +1,59 @@
+{{define "sidebar"}}
+<aside class="hidden md:block p-0">
+	<div id="desktop-topnav-app" v-cloak class="w-full max-w-none">
+		<div class="desktop-topnav-shell">
+			<div class="desktop-topnav-bar">
+				<a href="/" class="desktop-brand">
+					<img src="/web/static/img/pwa-192.png" alt="사이트 logo" class="w-11 h-11 rounded-2xl object-cover ring-1 ring-white/15 shrink-0" />
+					<h1 class="min-w-0 text-white font-bold text-[1.8rem] tracking-tight leading-none truncate">사이트</h1>
+				</a>
+
+				<nav class="desktop-inline-nav" aria-label="주요 메뉴">
+					{{range .Menus}}
+						{{range .Items}}
+							<a href="{{.Href}}" :class="['desktop-inline-nav-link', linkClass('{{.Href}}')]" class="desktop-inline-nav-link">{{.Label}}</a>
+						{{end}}
+					{{end}}
+				</nav>
+			</div>
+		</div>
+	</div>
+</aside>
+<script>
+	(function () {
+		const { createApp, reactive } = Vue;
+
+		const menuEntries = [
+			{{range .Menus}}
+				{{range .Items}}
+				{ href: {{printf "%q" .Href}}, label: {{printf "%q" .Label}} },
+				{{end}}
+			{{end}}
+		];
+
+		createApp({
+			setup() {
+				const state = reactive({
+					currentPath: window.location.pathname,
+				});
+
+				const isRouteActive = (href) => {
+					const target = `${href || ""}`.trim();
+					const current = `${state.currentPath || ""}`.trim();
+					if (!target) return false;
+					if (target === "/") return current === "/";
+					return current === target || current.startsWith(target + "/");
+				};
+
+				const linkClass = (href) => {
+					return isRouteActive(href) ? "desktop-nav-active" : "";
+				};
+
+				return {
+					linkClass,
+				};
+			}
+		}).mount("#desktop-topnav-app");
+	})();
+</script>
+{{end}}

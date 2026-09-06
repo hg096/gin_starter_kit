@@ -58,7 +58,7 @@ gin_starter/
 │   ├── validator/          # 입력 검증
 │   ├── errors/             # 에러 정의
 │   └── logger/             # 로거
-└── api/routes/             # 라우트 정의
+└── internal/api/routes/             # 라우트 정의
 ```
 
 ### 레이어 간 흐름
@@ -66,7 +66,7 @@ gin_starter/
 ```
 HTTP Request
     ↓
-Handler (api/routes, internal/domain/*/handler.go)
+Handler (internal/api/routes, internal/domain/*/handler.go)
   - HTTP 요청/응답 처리
   - 입력 검증 (pkg/validator)
   - 응답 포맷팅 (pkg/response)
@@ -111,7 +111,7 @@ type CreateBlogRequest struct {
 // internal/domain/blog/repository.go
 package blog
 
-import "gin_starter/internal/infrastructure/database"
+import "gin_starter/pkg/db/database"
 
 // Interface 정의 (테스트 Mock 가능)
 type Repository interface {
@@ -233,7 +233,7 @@ func (h *Handler) CreateBlog(c *gin.Context) {
 
 **Step 5: Routes 등록**
 ```go
-// api/routes/routes.go에 추가
+// internal/api/routes/routes.go에 추가
 
 import "gin_starter/internal/domain/blog"
 

@@ -4,9 +4,10 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"gin_starter/internal/infrastructure/database"
+	"gin_starter/pkg/db/database"
 	"gin_starter/pkg/errors"
 	"gin_starter/pkg/logger"
+	"gin_starter/pkg/utils"
 	"sort"
 	"strings"
 )
@@ -106,20 +107,9 @@ func (r *permissionRepository) EnsurePermissionCodes(codes map[string]string) er
 		return nil
 	}
 
-	tx, err := r.db.BeginTx()
-	if err != nil {
-		return errors.Wrap(err, "DATABASE_ERROR", "failed to begin permission sync transaction")
-	}
-	defer database.RollbackTx(tx)
-
-	if err := r.EnsurePermissionCodesTx(tx, codes); err != nil {
-		return err
-	}
-
-	if err := database.CommitTx(tx); err != nil {
-		return errors.Wrap(err, "DATABASE_ERROR", "failed to commit permission sync transaction")
-	}
-	return nil
+	return r.db.WithTx(func(tx *sql.Tx) error {
+		return r.EnsurePermissionCodesTx(tx, codes)
+	})
 }
 
 // EnsurePermissionCodesTx inserts or updates permission catalog entries in transaction.
@@ -131,7 +121,7 @@ func (r *permissionRepository) EnsurePermissionCodesTx(tx *sql.Tx, codes map[str
 	keys := make([]string, 0, len(codes))
 	for code := range codes {
 		trimmed := strings.TrimSpace(code)
-		if trimmed == "" {
+		if !utils.HasText(trimmed) {
 			continue
 		}
 		keys = append(keys, trimmed)
@@ -140,7 +130,7 @@ func (r *permissionRepository) EnsurePermissionCodesTx(tx *sql.Tx, codes map[str
 
 	for _, code := range keys {
 		description := strings.TrimSpace(codes[code])
-		if description == "" {
+		if !utils.HasText(description) {
 			description = code
 		}
 		if err := r.upsertPermissionCodeTx(tx, code, description); err != nil {
@@ -174,13 +164,13 @@ func (r *permissionRepository) ListPermissions() ([]Permission, error) {
 }
 
 func (r *permissionRepository) EnsureAdminPageSchema() error {
-	if _, err := r.base.Exec(createAdminPagesTableSQL); err != nil {
+	if _, err := r.base.ExecSchema(createAdminPagesTableSQL); err != nil {
 		return errors.Wrap(err, "DATABASE_ERROR", "failed to create admin page schema")
 	}
 	if err := r.ensureAdminPageColumns(); err != nil {
 		return err
 	}
-	if _, err := r.base.Exec(createPermissionsTableSQL); err != nil {
+	if _, err := r.base.ExecSchema(createPermissionsTableSQL); err != nil {
 		return errors.Wrap(err, "DATABASE_ERROR", "failed to create permissions schema")
 	}
 	return nil
@@ -264,7 +254,7 @@ func (r *permissionRepository) CreateAdminPageTx(tx *sql.Tx, page *AdminPage) er
 		"is_builtin":    boolToInt(page.Builtin),
 		"created_by":    nullableTrimmed(page.CreatedBy),
 	}
-	if _, err := r.base.InsertTx(tx, "_a_admin_pages", data); err != nil {
+	if _, err := r.base.Tx(tx).Insert("_a_admin_pages", data); err != nil {
 		return errors.Wrap(err, "DATABASE_ERROR", "failed to create admin page")
 	}
 	return nil
@@ -288,7 +278,7 @@ func (r *permissionRepository) UpdateAdminPageTx(tx *sql.Tx, page *AdminPage) er
 		"is_enabled":    boolToInt(page.Enabled),
 		"is_builtin":    boolToInt(page.Builtin),
 	}
-	affected, err := r.base.UpdateTx(tx, "_a_admin_pages", data, "page_key = ?", page.Key)
+	affected, err := r.base.Tx(tx).Update("_a_admin_pages", data, "page_key = ?", page.Key)
 	if err != nil {
 		return errors.Wrap(err, "DATABASE_ERROR", "failed to update admin page")
 	}
@@ -299,7 +289,7 @@ func (r *permissionRepository) UpdateAdminPageTx(tx *sql.Tx, page *AdminPage) er
 }
 
 func (r *permissionRepository) DeleteAdminPageTx(tx *sql.Tx, pageKey string) error {
-	affected, err := r.base.DeleteTx(tx, "_a_admin_pages", "page_key = ?", pageKey)
+	affected, err := r.base.Tx(tx).Delete("_a_admin_pages", "page_key = ?", pageKey)
 	if err != nil {
 		return errors.Wrap(err, "DATABASE_ERROR", "failed to delete admin page")
 	}
@@ -327,13 +317,14 @@ func (r *permissionRepository) EnsurePagePermissionCodesTx(tx *sql.Tx, page *Adm
 func (r *permissionRepository) DeletePagePermissionCodesTx(tx *sql.Tx, pageKey string) error {
 	likeExpr := fmt.Sprintf("admin.page.%s.%%", pageKey)
 
-	if _, err := r.base.DeleteTx(tx, "_a_user_permissions", "permission_code LIKE ?", likeExpr); err != nil {
+	txRepo := r.base.Tx(tx)
+	if _, err := txRepo.Delete("_a_user_permissions", "permission_code LIKE ?", likeExpr); err != nil {
 		return errors.Wrap(err, "DATABASE_ERROR", "failed to delete page user permissions")
 	}
-	if _, err := r.base.DeleteTx(tx, "_a_delegable_permissions", "permission_code LIKE ?", likeExpr); err != nil {
+	if _, err := txRepo.Delete("_a_delegable_permissions", "permission_code LIKE ?", likeExpr); err != nil {
 		return errors.Wrap(err, "DATABASE_ERROR", "failed to delete page delegable permissions")
 	}
-	if _, err := r.base.DeleteTx(tx, "_a_permissions", "permission_code LIKE ?", likeExpr); err != nil {
+	if _, err := txRepo.Delete("_a_permissions", "permission_code LIKE ?", likeExpr); err != nil {
 		return errors.Wrap(err, "DATABASE_ERROR", "failed to delete page permissions")
 	}
 
@@ -341,19 +332,12 @@ func (r *permissionRepository) DeletePagePermissionCodesTx(tx *sql.Tx, pageKey s
 }
 
 func (r *permissionRepository) ListAuditLogs(req *AdminAuditLogListRequest) (*AdminAuditLogListResponse, error) {
-	page := req.Page
-	limit := req.Limit
-	if page < 1 {
-		page = 1
-	}
-	if limit < 1 || limit > 100 {
-		limit = 20
-	}
+	pagination := utils.NewPagination(req.Page, req.Limit, 20, 100)
 
 	whereClauses := make([]string, 0, 6)
 	args := make([]interface{}, 0, 8)
 
-	if strings.TrimSpace(req.Action) != "" {
+	if utils.HasText(req.Action) {
 		actions := splitFilterCSV(req.Action)
 		if len(actions) == 1 {
 			whereClauses = append(whereClauses, "action = ?")
@@ -365,22 +349,17 @@ func (r *permissionRepository) ListAuditLogs(req *AdminAuditLogListRequest) (*Ad
 			}
 		}
 	}
-	if strings.TrimSpace(req.ActorID) != "" {
-		whereClauses = append(whereClauses, "actor_id = ?")
-		args = append(args, strings.TrimSpace(req.ActorID))
+	appendAuditFilter := func(column string, value string) {
+		if !utils.HasText(value) {
+			return
+		}
+		whereClauses = append(whereClauses, column)
+		args = append(args, strings.TrimSpace(value))
 	}
-	if strings.TrimSpace(req.TargetUserID) != "" {
-		whereClauses = append(whereClauses, "target_user_id = ?")
-		args = append(args, strings.TrimSpace(req.TargetUserID))
-	}
-	if strings.TrimSpace(req.DateFrom) != "" {
-		whereClauses = append(whereClauses, "created_at >= ?")
-		args = append(args, strings.TrimSpace(req.DateFrom))
-	}
-	if strings.TrimSpace(req.DateTo) != "" {
-		whereClauses = append(whereClauses, "created_at < ?")
-		args = append(args, strings.TrimSpace(req.DateTo))
-	}
+	appendAuditFilter("actor_id = ?", req.ActorID)
+	appendAuditFilter("target_user_id = ?", req.TargetUserID)
+	appendAuditFilter("created_at >= ?", req.DateFrom)
+	appendAuditFilter("created_at < ?", req.DateTo)
 
 	whereSQL := ""
 	if len(whereClauses) > 0 {
@@ -395,10 +374,9 @@ func (r *permissionRepository) ListAuditLogs(req *AdminAuditLogListRequest) (*Ad
 		return nil, errors.Wrap(err, "DATABASE_ERROR", "failed to count audit logs")
 	}
 
-	offset := (page - 1) * limit
 	listQuery := `SELECT aal_idx, actor_id, target_user_id, action, status, message, ip_addr, before_data, after_data, created_at
 		FROM _a_admin_audit_logs` + whereSQL + ` ORDER BY created_at DESC, aal_idx DESC LIMIT ? OFFSET ?`
-	listArgs := append(append(make([]interface{}, 0, len(args)+2), args...), limit, offset)
+	listArgs := append(append(make([]interface{}, 0, len(args)+2), args...), pagination.Limit, pagination.Offset)
 
 	rows, err := r.base.Query(listQuery, listArgs...)
 	if err != nil {
@@ -406,7 +384,7 @@ func (r *permissionRepository) ListAuditLogs(req *AdminAuditLogListRequest) (*Ad
 	}
 	defer rows.Close()
 
-	logs := make([]AdminAuditLogItem, 0, limit)
+	logs := make([]AdminAuditLogItem, 0, pagination.Limit)
 	for rows.Next() {
 		var item AdminAuditLogItem
 		var actorID sql.NullString
@@ -446,8 +424,8 @@ func (r *permissionRepository) ListAuditLogs(req *AdminAuditLogListRequest) (*Ad
 	return &AdminAuditLogListResponse{
 		Logs:  logs,
 		Total: total,
-		Page:  page,
-		Limit: limit,
+		Page:  pagination.Page,
+		Limit: pagination.Limit,
 	}, nil
 }
 
@@ -465,7 +443,7 @@ func (r *permissionRepository) GetLevelPolicyEnabled() (bool, error) {
 		return false, errors.Wrap(err, "DATABASE_ERROR", "failed to read level policy setting")
 	}
 
-	value := strings.ToLower(strings.TrimSpace(raw.String))
+	value := utils.TrimLower(raw.String)
 	switch value {
 	case "", "1", "true", "on", "yes", "y":
 		return true, nil
@@ -483,7 +461,7 @@ func (r *permissionRepository) SetLevelPolicyEnabledTx(tx *sql.Tx, enabled bool,
 	}
 	trimmedUpdatedBy := strings.TrimSpace(updatedBy)
 	var updatedByValue interface{}
-	if trimmedUpdatedBy != "" {
+	if utils.HasText(trimmedUpdatedBy) {
 		updatedByValue = trimmedUpdatedBy
 	}
 
@@ -492,13 +470,14 @@ func (r *permissionRepository) SetLevelPolicyEnabledTx(tx *sql.Tx, enabled bool,
 		"updated_by":    updatedByValue,
 	}
 
-	affected, err := r.base.UpdateTx(tx, "_a_system_settings", updateData, "setting_key = ?", "level_policy_enabled")
+	txRepo := r.base.Tx(tx)
+	affected, err := txRepo.Update("_a_system_settings", updateData, "setting_key = ?", "level_policy_enabled")
 	if err != nil && isMissingTableErrorForSettings(err) {
 		logger.Warn("_a_system_settings table missing; creating it on-demand")
 		if ensureErr := r.ensureSystemSettingsTableTx(tx); ensureErr != nil {
 			return ensureErr
 		}
-		affected, err = r.base.UpdateTx(tx, "_a_system_settings", updateData, "setting_key = ?", "level_policy_enabled")
+		affected, err = txRepo.Update("_a_system_settings", updateData, "setting_key = ?", "level_policy_enabled")
 	}
 	if err != nil {
 		return errors.Wrap(err, "DATABASE_ERROR", "failed to update level policy setting")
@@ -510,7 +489,7 @@ func (r *permissionRepository) SetLevelPolicyEnabledTx(tx *sql.Tx, enabled bool,
 			"setting_value": value,
 			"updated_by":    updatedByValue,
 		}
-		if _, err := r.base.InsertTx(tx, "_a_system_settings", insertData); err != nil {
+		if _, err := txRepo.Insert("_a_system_settings", insertData); err != nil {
 			return errors.Wrap(err, "DATABASE_ERROR", "failed to insert level policy setting")
 		}
 	}
@@ -520,7 +499,7 @@ func (r *permissionRepository) SetLevelPolicyEnabledTx(tx *sql.Tx, enabled bool,
 
 func (r *permissionRepository) ensureSystemSettingsTableTx(tx *sql.Tx) error {
 	logger.Debug("SQL Exec (TX): create _a_system_settings if not exists")
-	if _, err := r.base.ExecTx(tx, createSystemSettingsTableSQL); err != nil {
+	if _, err := r.base.Tx(tx).ExecSchema(createSystemSettingsTableSQL); err != nil {
 		return errors.Wrap(err, "DATABASE_ERROR", "failed to create system settings table")
 	}
 	return nil
@@ -550,7 +529,8 @@ func (r *permissionRepository) ListUserPermissions(userID string) ([]string, err
 }
 
 func (r *permissionRepository) ReplaceUserPermissionsTx(tx *sql.Tx, userID string, permissionCodes []string) error {
-	if _, err := r.base.DeleteTx(tx, "_a_user_permissions", "u_id = ?", userID); err != nil {
+	txRepo := r.base.Tx(tx)
+	if _, err := txRepo.Delete("_a_user_permissions", "u_id = ?", userID); err != nil {
 		return errors.Wrap(err, "DATABASE_ERROR", "failed to clear user permissions")
 	}
 
@@ -559,7 +539,7 @@ func (r *permissionRepository) ReplaceUserPermissionsTx(tx *sql.Tx, userID strin
 			"u_id":            userID,
 			"permission_code": code,
 		}
-		if _, err := r.base.InsertTx(tx, "_a_user_permissions", data); err != nil {
+		if _, err := txRepo.Insert("_a_user_permissions", data); err != nil {
 			return errors.Wrap(err, "DATABASE_ERROR", "failed to assign user permissions")
 		}
 	}
@@ -568,7 +548,7 @@ func (r *permissionRepository) ReplaceUserPermissionsTx(tx *sql.Tx, userID strin
 }
 
 func (r *permissionRepository) DeleteUserPermissionsTx(tx *sql.Tx, userID string) error {
-	if _, err := r.base.DeleteTx(tx, "_a_user_permissions", "u_id = ?", userID); err != nil {
+	if _, err := r.base.Tx(tx).Delete("_a_user_permissions", "u_id = ?", userID); err != nil {
 		return errors.Wrap(err, "DATABASE_ERROR", "failed to delete user permissions")
 	}
 	return nil
@@ -612,7 +592,8 @@ func (r *permissionRepository) DelegableSet() (map[string]struct{}, error) {
 }
 
 func (r *permissionRepository) ReplaceDelegablePermissionsTx(tx *sql.Tx, permissionCodes []string) error {
-	if _, err := r.base.DeleteTx(tx, "_a_delegable_permissions", "1 = 1"); err != nil {
+	txRepo := r.base.Tx(tx)
+	if _, err := txRepo.Delete("_a_delegable_permissions", "1 = 1"); err != nil {
 		return errors.Wrap(err, "DATABASE_ERROR", "failed to clear delegable permissions")
 	}
 
@@ -620,7 +601,7 @@ func (r *permissionRepository) ReplaceDelegablePermissionsTx(tx *sql.Tx, permiss
 		data := map[string]interface{}{
 			"permission_code": code,
 		}
-		if _, err := r.base.InsertTx(tx, "_a_delegable_permissions", data); err != nil {
+		if _, err := txRepo.Insert("_a_delegable_permissions", data); err != nil {
 			return errors.Wrap(err, "DATABASE_ERROR", "failed to update delegable permissions")
 		}
 	}
@@ -656,7 +637,7 @@ func (r *permissionRepository) PermissionCodesExist(codes []string) (bool, error
 func (r *permissionRepository) GrantPermissionFromExistingTx(tx *sql.Tx, targetCode, sourceCode string) error {
 	targetCode = strings.TrimSpace(targetCode)
 	sourceCode = strings.TrimSpace(sourceCode)
-	if targetCode == "" || sourceCode == "" {
+	if !utils.HasText(targetCode) || !utils.HasText(sourceCode) {
 		return nil
 	}
 
@@ -666,7 +647,7 @@ func (r *permissionRepository) GrantPermissionFromExistingTx(tx *sql.Tx, targetC
 		WHERE up.permission_code = ?
 		ON DUPLICATE KEY UPDATE permission_code = VALUES(permission_code)`
 
-	if _, err := r.base.ExecTx(tx, query, targetCode, sourceCode); err != nil {
+	if _, err := r.base.Tx(tx).Exec(query, targetCode, sourceCode); err != nil {
 		return errors.Wrap(err, "DATABASE_ERROR", "failed to grant permission from source")
 	}
 	return nil
@@ -695,7 +676,7 @@ func (r *permissionRepository) WriteAuditLogTx(tx *sql.Tx, entry *AuditLogEntry)
 		"before_data":    beforeJSON,
 		"after_data":     afterJSON,
 	}
-	_, err = r.base.InsertTx(tx, "_a_admin_audit_logs", data)
+	_, err = r.base.Tx(tx).Insert("_a_admin_audit_logs", data)
 	if err != nil {
 		return errors.Wrap(err, "AUDIT_LOG_FAILED", "failed to write audit log")
 	}
@@ -753,19 +734,7 @@ func parseJSONStringSlice(raw []byte) []string {
 	if err := json.Unmarshal(raw, &values); err != nil {
 		return []string{}
 	}
-	out := make([]string, 0, len(values))
-	seen := make(map[string]struct{}, len(values))
-	for _, value := range values {
-		trimmed := strings.TrimSpace(value)
-		if trimmed == "" {
-			continue
-		}
-		if _, exists := seen[trimmed]; exists {
-			continue
-		}
-		seen[trimmed] = struct{}{}
-		out = append(out, trimmed)
-	}
+	out := utils.UniqueStrings(values)
 	sort.Strings(out)
 	return out
 }
@@ -774,19 +743,7 @@ func nullableJSONSlice(values []string) interface{} {
 	if len(values) == 0 {
 		return nil
 	}
-	normalized := make([]string, 0, len(values))
-	seen := make(map[string]struct{}, len(values))
-	for _, value := range values {
-		trimmed := strings.TrimSpace(value)
-		if trimmed == "" {
-			continue
-		}
-		if _, exists := seen[trimmed]; exists {
-			continue
-		}
-		seen[trimmed] = struct{}{}
-		normalized = append(normalized, trimmed)
-	}
+	normalized := utils.UniqueStrings(values)
 	if len(normalized) == 0 {
 		return nil
 	}
@@ -821,28 +778,14 @@ func repeat(value string, count int) []string {
 }
 
 func splitFilterCSV(raw string) []string {
-	chunks := strings.Split(raw, ",")
-	out := make([]string, 0, len(chunks))
-	seen := make(map[string]struct{}, len(chunks))
-	for _, chunk := range chunks {
-		value := strings.TrimSpace(chunk)
-		if value == "" {
-			continue
-		}
-		if _, exists := seen[value]; exists {
-			continue
-		}
-		seen[value] = struct{}{}
-		out = append(out, value)
-	}
-	return out
+	return utils.UniqueStrings(strings.Split(raw, ","))
 }
 
 func isMissingTableErrorForSettings(err error) bool {
 	if err == nil {
 		return false
 	}
-	msg := strings.ToLower(err.Error())
+	msg := utils.TrimLower(err.Error())
 	return strings.Contains(msg, "doesn't exist") || strings.Contains(msg, "no such table")
 }
 
@@ -889,14 +832,15 @@ func scanAdminPageRow(scanner interface {
 }
 
 func (r *permissionRepository) upsertPermissionCodeTx(tx *sql.Tx, code string, description string) error {
-	affected, err := r.base.UpdateTx(tx, "_a_permissions", map[string]interface{}{
+	txRepo := r.base.Tx(tx)
+	affected, err := txRepo.Update("_a_permissions", map[string]interface{}{
 		"description": description,
 	}, "permission_code = ?", code)
 	if err != nil && isMissingTableErrorForSettings(err) {
 		if ensureErr := r.ensurePermissionsTableTx(tx); ensureErr != nil {
 			return ensureErr
 		}
-		affected, err = r.base.UpdateTx(tx, "_a_permissions", map[string]interface{}{
+		affected, err = txRepo.Update("_a_permissions", map[string]interface{}{
 			"description": description,
 		}, "permission_code = ?", code)
 	}
@@ -915,7 +859,7 @@ func (r *permissionRepository) upsertPermissionCodeTx(tx *sql.Tx, code string, d
 		return nil
 	}
 
-	if _, err := r.base.InsertTx(tx, "_a_permissions", map[string]interface{}{
+	if _, err := txRepo.Insert("_a_permissions", map[string]interface{}{
 		"permission_code": code,
 		"description":     description,
 	}); err != nil {
@@ -928,7 +872,7 @@ func (r *permissionRepository) upsertPermissionCodeTx(tx *sql.Tx, code string, d
 }
 
 func (r *permissionRepository) ensurePermissionsTableTx(tx *sql.Tx) error {
-	if _, err := r.base.ExecTx(tx, createPermissionsTableSQL); err != nil {
+	if _, err := r.base.Tx(tx).ExecSchema(createPermissionsTableSQL); err != nil {
 		return errors.Wrap(err, "DATABASE_ERROR", "failed to create permissions table")
 	}
 	return nil
@@ -936,7 +880,7 @@ func (r *permissionRepository) ensurePermissionsTableTx(tx *sql.Tx) error {
 
 func pagePermissionDescription(pageTitle string, action string) string {
 	trimmedTitle := strings.TrimSpace(pageTitle)
-	if trimmedTitle == "" {
+	if !utils.HasText(trimmedTitle) {
 		trimmedTitle = "admin page"
 	}
 
@@ -956,7 +900,7 @@ func pagePermissionDescription(pageTitle string, action string) string {
 
 func nullableTrimmed(value string) interface{} {
 	trimmed := strings.TrimSpace(value)
-	if trimmed == "" {
+	if !utils.HasText(trimmed) {
 		return nil
 	}
 	return trimmed
@@ -973,35 +917,89 @@ func isDuplicateKeyError(err error) bool {
 	if err == nil {
 		return false
 	}
-	msg := strings.ToLower(err.Error())
+	msg := utils.TrimLower(err.Error())
 	return strings.Contains(msg, "duplicate entry") || strings.Contains(msg, "unique constraint")
 }
 
 func (r *permissionRepository) ensureAdminPageColumns() error {
-	alterStatements := []string{
-		"ALTER TABLE _a_admin_pages ADD COLUMN group_key VARCHAR(48) NOT NULL DEFAULT 'general' AFTER description",
-		"ALTER TABLE _a_admin_pages ADD COLUMN group_label VARCHAR(100) NOT NULL DEFAULT 'General' AFTER group_key",
-		"ALTER TABLE _a_admin_pages ADD COLUMN group_order INT NOT NULL DEFAULT 100 AFTER group_label",
-		"ALTER TABLE _a_admin_pages ADD COLUMN visible_roles JSON NULL AFTER group_order",
-		"ALTER TABLE _a_admin_pages ADD KEY idx_a_admin_pages_enabled_group_sort (is_enabled, group_order, sort_order)",
+	columnStatements := []struct {
+		name      string
+		statement string
+	}{
+		{name: "group_key", statement: "ALTER TABLE _a_admin_pages ADD COLUMN group_key VARCHAR(48) NOT NULL DEFAULT 'general' AFTER description"},
+		{name: "group_label", statement: "ALTER TABLE _a_admin_pages ADD COLUMN group_label VARCHAR(100) NOT NULL DEFAULT 'General' AFTER group_key"},
+		{name: "group_order", statement: "ALTER TABLE _a_admin_pages ADD COLUMN group_order INT NOT NULL DEFAULT 100 AFTER group_label"},
+		{name: "visible_roles", statement: "ALTER TABLE _a_admin_pages ADD COLUMN visible_roles JSON NULL AFTER group_order"},
 	}
 
-	for _, statement := range alterStatements {
-		if _, err := r.base.Exec(statement); err != nil {
-			if isDuplicateColumnError(err) || isDuplicateIndexNameError(err) {
+	for _, column := range columnStatements {
+		exists, err := r.adminPageColumnExists(column.name)
+		if err != nil {
+			return err
+		}
+		if exists {
+			continue
+		}
+		if _, err := r.base.ExecSchema(column.statement); err != nil {
+			if isDuplicateColumnError(err) {
 				continue
 			}
 			return errors.Wrap(err, "DATABASE_ERROR", "failed to extend admin page schema")
 		}
 	}
+
+	const indexName = "idx_a_admin_pages_enabled_group_sort"
+	indexExists, err := r.adminPageIndexExists(indexName)
+	if err != nil {
+		return err
+	}
+	if indexExists {
+		return nil
+	}
+	if _, err := r.base.ExecSchema("ALTER TABLE _a_admin_pages ADD KEY idx_a_admin_pages_enabled_group_sort (is_enabled, group_order, sort_order)"); err != nil {
+		if isDuplicateIndexNameError(err) {
+			return nil
+		}
+		return errors.Wrap(err, "DATABASE_ERROR", "failed to extend admin page schema")
+	}
 	return nil
+}
+
+func (r *permissionRepository) adminPageColumnExists(columnName string) (bool, error) {
+	var count int
+	err := r.base.QueryRow(`
+		SELECT COUNT(*)
+		FROM information_schema.COLUMNS
+		WHERE TABLE_SCHEMA = DATABASE()
+		  AND TABLE_NAME = '_a_admin_pages'
+		  AND COLUMN_NAME = ?
+	`, columnName).Scan(&count)
+	if err != nil {
+		return false, errors.Wrap(err, "DATABASE_ERROR", "failed to inspect admin page columns")
+	}
+	return count > 0, nil
+}
+
+func (r *permissionRepository) adminPageIndexExists(indexName string) (bool, error) {
+	var count int
+	err := r.base.QueryRow(`
+		SELECT COUNT(*)
+		FROM information_schema.STATISTICS
+		WHERE TABLE_SCHEMA = DATABASE()
+		  AND TABLE_NAME = '_a_admin_pages'
+		  AND INDEX_NAME = ?
+	`, indexName).Scan(&count)
+	if err != nil {
+		return false, errors.Wrap(err, "DATABASE_ERROR", "failed to inspect admin page indexes")
+	}
+	return count > 0, nil
 }
 
 func isDuplicateColumnError(err error) bool {
 	if err == nil {
 		return false
 	}
-	msg := strings.ToLower(err.Error())
+	msg := utils.TrimLower(err.Error())
 	return strings.Contains(msg, "duplicate column name")
 }
 
@@ -1009,7 +1007,7 @@ func isDuplicateIndexNameError(err error) bool {
 	if err == nil {
 		return false
 	}
-	msg := strings.ToLower(err.Error())
+	msg := utils.TrimLower(err.Error())
 	return strings.Contains(msg, "duplicate key name")
 }
 
@@ -1017,6 +1015,6 @@ func isUnknownColumnError(err error) bool {
 	if err == nil {
 		return false
 	}
-	msg := strings.ToLower(err.Error())
+	msg := utils.TrimLower(err.Error())
 	return strings.Contains(msg, "unknown column")
 }

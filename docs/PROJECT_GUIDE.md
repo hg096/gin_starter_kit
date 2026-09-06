@@ -14,14 +14,14 @@
 
 ### 첫 진입 파일 3개
 - `cmd/server/main.go`
-- `api/routes/routes.go`
-- `internal/middleware/auth.go`
+- `internal/api/routes/routes.go`
+- `pkg/middleware/auth.go`
 
 ### 오늘 처음 보는 사람이 할 5단계
 1. `cmd/server/main.go`에서 부팅 순서를 확인합니다.
-2. `api/routes/routes.go`에서 엔드포인트와 미들웨어 연결을 확인합니다.
+2. `internal/api/routes/routes.go`에서 엔드포인트와 미들웨어 연결을 확인합니다.
 3. `internal/domain/user/handler.go -> service.go -> repository.go` 순서로 한 기능(login)을 추적합니다.
-4. `internal/middleware/auth.go`에서 인증 우선순위(헤더/쿠키)와 권한 컨텍스트를 확인합니다.
+4. `pkg/middleware/auth.go`에서 인증 우선순위(헤더/쿠키)와 권한 컨텍스트를 확인합니다.
 5. `go test ./...`와 `go vet ./...`를 실행해 현재 상태를 검증합니다.
 
 ### 핵심 엔드포인트 스냅샷
@@ -65,11 +65,11 @@ gin_starter/
 
 ### 각 디렉터리 책임 (1문장)
 - `cmd/`: 실행 가능한 앱 진입점과 프로세스 생명주기를 담당합니다.
-- `api/routes/`: 공개 라우팅과 도메인 핸들러/미들웨어 조합을 담당합니다.
+- `internal/api/routes/`: 공개 라우팅과 도메인 핸들러/미들웨어 조합을 담당합니다.
 - `internal/config/`: 환경 변수 로딩, 검증, 런타임 설정 객체를 담당합니다.
-- `internal/middleware/`: 인증, CORS, 로깅 등 공통 요청 전처리를 담당합니다.
+- `pkg/middleware/`: 인증, CORS, 로깅 등 공통 요청 전처리를 담당합니다.
 - `internal/domain/*`: 비즈니스 규칙(Handler/Service/Repository)을 도메인별로 분리합니다.
-- `internal/infrastructure/database/`: SQL 실행 공통 유틸과 DB 연결 관리를 담당합니다.
+- `pkg/db/database/`: SQL 실행 공통 유틸과 DB 연결 관리를 담당합니다.
 - `internal/websocket/`: WebSocket hub/client/handler와 실시간 라우트를 담당합니다.
 - `pkg/*`: 응답 포맷, 공통 에러, 검증, 로깅 등 재사용 유틸을 담당합니다.
 - `web/admin/templates/`: 관리자 페이지 UI 템플릿을 담당합니다.
@@ -77,9 +77,9 @@ gin_starter/
 
 ### 수정 시 먼저 확인할 파일 경로
 - 서버 부팅/종료: `cmd/server/main.go`
-- API 라우트: `api/routes/routes.go`
-- 인증/권한: `internal/middleware/auth.go`
-- CORS/Origin: `internal/middleware/cors.go`, `internal/config/config.go`, `internal/websocket/handler.go`
+- API 라우트: `internal/api/routes/routes.go`
+- 인증/권한: `pkg/middleware/auth.go`
+- CORS/Origin: `pkg/middleware/cors.go`, `internal/config/config.go`, `internal/websocket/handler.go`
 - 사용자 로그인/리프레시/로그아웃: `internal/domain/user/handler.go`, `internal/domain/user/service.go`
 - 공통 응답/에러 매핑: `pkg/response/response.go`, `pkg/errors/errors.go`
 
@@ -110,14 +110,14 @@ config.Load
 - 계층 분리를 통해 HTTP 처리, 비즈니스 규칙, DB 접근, 응답 포맷 책임을 분리합니다.
 
 ### 어디서
-- 라우트: `api/routes/routes.go`
+- 라우트: `internal/api/routes/routes.go`
 - 핸들러: `internal/domain/*/handler.go`
 - 서비스: `internal/domain/*/service.go`
-- 저장소: `internal/domain/*/repository.go`, `internal/infrastructure/database/repository.go`
+- 저장소: `internal/domain/*/repository.go`, `pkg/db/database/repository.go`
 - 응답: `pkg/response/response.go`
 
 ### 어떻게 (예: `/api/user/profile`)
-1. `api/routes/routes.go`에서 `auth.Use(middleware.AuthMiddleware(cfg))`로 보호 라우트 등록.
+1. `internal/api/routes/routes.go`에서 `auth.Use(middleware.AuthMiddleware(cfg))`로 보호 라우트 등록.
 2. `AuthMiddleware`가 토큰 검증 후 `user_id`, `user_type`, `user_level`을 context에 저장.
 3. `internal/domain/user/handler.go:GetProfile`가 context의 `user_id`를 읽음.
 4. `internal/domain/user/service.go:GetProfile`가 repository를 호출.
@@ -131,9 +131,9 @@ config.Load
 - API 클라이언트(Postman/SDK)는 Bearer를, 브라우저 기반 관리자 UI는 HttpOnly 쿠키를 자연스럽게 사용하기 위함입니다.
 
 ### 어디서
-- 핵심 로직: `internal/middleware/auth.go`
+- 핵심 로직: `pkg/middleware/auth.go`
 - 로그인/리프레시 쿠키 발급: `internal/domain/user/handler.go`
-- 관리자 페이지 보호: `api/routes/routes.go` + `AdminPageAuthMiddleware`
+- 관리자 페이지 보호: `internal/api/routes/routes.go` + `AdminPageAuthMiddleware`
 
 ### 어떻게
 - 토큰 추출 우선순위: Header -> Cookie
@@ -174,14 +174,14 @@ config.Load
 
 ## Data Access & DB
 ### 무엇
-- DB 접근은 도메인 repository가 `internal/infrastructure/database.Repository`를 활용하는 구조입니다.
+- DB 접근은 도메인 repository가 `pkg/db/database.Repository`를 활용하는 구조입니다.
 
 ### 왜
 - SQL 실행 공통 로직을 재사용하고, 도메인별 쿼리 책임을 분리하기 위함입니다.
 
 ### 어디서
-- 연결/헬스체크: `internal/infrastructure/database/mysql.go`
-- 공통 SQL 도우미: `internal/infrastructure/database/repository.go`
+- 연결/헬스체크: `pkg/db/database/mysql.go`
+- 공통 SQL 도우미: `pkg/db/database/repository.go`
 - 도메인 SQL: `internal/domain/*/repository.go`
 - 스키마 기준: `table.sql`, `migrations/*.sql`
 
@@ -215,7 +215,7 @@ config.Load
 2. `repository` 작성 (`internal/domain/<feature>/repository.go`)
 3. `service` 작성 (`internal/domain/<feature>/service.go`)
 4. `handler` 작성 (`internal/domain/<feature>/handler.go`)
-5. 라우트 등록 (`api/routes/routes.go`)
+5. 라우트 등록 (`internal/api/routes/routes.go`)
 
 ### 무엇
 - 위 순서는 이 프로젝트의 계층 분리 원칙을 깨지 않고 기능을 추가하는 기본 루틴입니다.
@@ -225,7 +225,7 @@ config.Load
 
 ### 어디서
 - 도메인 파일: `internal/domain/<feature>/*`
-- 라우트 파일: `api/routes/routes.go`
+- 라우트 파일: `internal/api/routes/routes.go`
 - 공통 응답/검증: `pkg/response/response.go`, `pkg/validator/validator.go`
 
 ### 어떻게 (8개 체크리스트)
@@ -264,11 +264,11 @@ config.Load
 - Language: Go (module: `gin_starter`)
 - Framework: Gin (`github.com/gin-gonic/gin`)
 - Entry point: `cmd/server/main.go`
-- Main routing file: `api/routes/routes.go`
+- Main routing file: `internal/api/routes/routes.go`
 
 ### Key Entry Points
 - `cmd/server/main.go`
-- `api/routes/routes.go`
+- `internal/api/routes/routes.go`
 - `internal/config/config.go`
 
 ### Safe Change Zones
@@ -276,8 +276,8 @@ config.Load
 - `README.md` (link-only updates)
 
 ### Risky Change Zones
-- `internal/middleware/auth.go`
-- `api/routes/routes.go`
+- `pkg/middleware/auth.go`
+- `internal/api/routes/routes.go`
 - `internal/domain/*/service.go`
 
 ### Task Prompt Template
@@ -300,10 +300,10 @@ config.Load
 
 ## Reading Order
 1. `cmd/server/main.go` (부팅/종료 전체 맥락)
-2. `api/routes/routes.go` (엔드포인트 및 미들웨어 조합)
-3. `internal/middleware/auth.go` (인증/권한 핵심)
+2. `internal/api/routes/routes.go` (엔드포인트 및 미들웨어 조합)
+3. `pkg/middleware/auth.go` (인증/권한 핵심)
 4. `internal/domain/user/*` (대표 도메인 흐름)
 5. `internal/domain/blog/*`, `internal/domain/admin/*` (확장 패턴)
-6. `internal/infrastructure/database/*` + `pkg/response/response.go` (공통 기반)
+6. `pkg/db/database/*` + `pkg/response/response.go` (공통 기반)
 7. `internal/websocket/*` (실시간 채널)
 8. `.github/workflows/ci.yml` (검증 파이프라인)

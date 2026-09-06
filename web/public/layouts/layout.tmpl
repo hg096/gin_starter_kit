@@ -1,0 +1,535 @@
+{{define "layout"}}
+<!DOCTYPE html>
+<html lang="ko">
+	<head>
+		<title>{{if .SEOTitle}}{{.SEOTitle}}{{else}}{{block "title" .}}{{end}}{{end}}</title>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+		<meta name="application-name" content="사이트" />
+		<meta name="mobile-web-app-capable" content="yes" />
+		<meta name="apple-mobile-web-app-capable" content="yes" />
+		<meta name="apple-mobile-web-app-title" content="사이트" />
+		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+		<meta name="theme-color" content="#ffffff" />
+		<meta name="format-detection" content="telephone=no" />
+		<link rel="manifest" href="/manifest.webmanifest" />
+		<link rel="icon" type="image/png" href="/web/static/img/pwa-192.png" />
+		<link rel="apple-touch-icon" sizes="180x180" href="/web/static/img/apple-touch-icon-180.png" />
+		<meta name="description" content="{{if .MetaDescription}}{{.MetaDescription}}{{else}}사이트 설명{{end}}" />
+		{{if .MetaKeywords}}<meta name="keywords" content="{{.MetaKeywords}}" />{{end}}
+		<meta name="robots" content="{{if .MetaRobots}}{{.MetaRobots}}{{else}}index,follow{{end}}" />
+		{{if .CanonicalURL}}<link rel="canonical" href="{{.CanonicalURL}}" />{{end}}
+		{{if .GoogleSiteVerification}}<meta name="google-site-verification" content="{{.GoogleSiteVerification}}" />{{end}}
+
+		<meta property="og:site_name" content="사이트" />
+		<meta property="og:locale" content="ko_KR" />
+		<meta property="og:type" content="{{if .OGType}}{{.OGType}}{{else}}website{{end}}" />
+		<meta property="og:title" content="{{if .OGTitle}}{{.OGTitle}}{{else}}사이트{{end}}" />
+		<meta property="og:description" content="{{if .OGDescription}}{{.OGDescription}}{{else}}사이트 설명{{end}}" />
+		{{if .OGURL}}<meta property="og:url" content="{{.OGURL}}" />{{end}}
+		{{if .OGImage}}<meta property="og:image" content="{{.OGImage}}" />{{end}}
+		{{if .OGImageAlt}}<meta property="og:image:alt" content="{{.OGImageAlt}}" />{{end}}
+		{{if .OGImageWidth}}<meta property="og:image:width" content="{{.OGImageWidth}}" />{{end}}
+		{{if .OGImageHeight}}<meta property="og:image:height" content="{{.OGImageHeight}}" />{{end}}
+
+		<meta name="twitter:card" content="{{if .TwitterCard}}{{.TwitterCard}}{{else}}summary_large_image{{end}}" />
+		<meta name="twitter:title" content="{{if .OGTitle}}{{.OGTitle}}{{else}}사이트{{end}}" />
+		<meta name="twitter:description" content="{{if .OGDescription}}{{.OGDescription}}{{else}}사이트 설명{{end}}" />
+		{{if .TwitterImage}}<meta name="twitter:image" content="{{.TwitterImage}}" />{{end}}
+
+		{{if .StructuredDataJSON}}
+		<script type="application/ld+json">{{.StructuredDataJSON}}</script>
+		{{end}}
+
+		{{if and .AdSenseEnabled .AdSenseClientID}}
+		<meta name="google-adsense-account" content="{{.AdSenseClientID}}" />
+		<script
+			async
+			src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client={{.AdSenseClientID}}"
+			crossorigin="anonymous"
+		></script>
+		{{end}}
+
+		<link rel="preconnect" href="https://fonts.googleapis.com" />
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+		<link
+			href="https://fonts.googleapis.com/css2?family=Manrope:wght@600;700;800&family=Noto+Sans+KR:wght@400;500;700&display=swap"
+			rel="stylesheet"
+		/>
+
+		<!-- Tailwind CSS CDN -->
+		<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+		<style type="text/tailwindcss">
+			@theme {
+
+			}
+		</style>
+
+		<link rel="stylesheet" href="/web/static/css/public-common.css" />
+		<link rel="stylesheet" href="/web/static/css/components/tooltip.css?v=20260507-4" />
+		{{if eq .CurrentPageKey "home"}}<link rel="stylesheet" href="/web/static/css/pages/home.css" />{{end}}
+		{{if or (eq .CurrentPageKey "smartmoney") (eq .CurrentPageKey "smartmoney_etfactual")}}<link rel="stylesheet" href="/web/static/css/pages/smartmoney.css?v=20260514-institutional-scroll-1" />{{end}}
+		{{if eq .CurrentPageKey "commodities"}}<link rel="stylesheet" href="/web/static/css/pages/commodities.css?v=20260514-watch-grid-1" />{{end}}
+		{{if eq .CurrentPageKey "calendar"}}<link rel="stylesheet" href="/web/static/css/pages/calendar.css" />{{end}}
+		{{if eq .CurrentPageKey "leader_insights"}}<link rel="stylesheet" href="/web/static/css/pages/leader_insights.css?v=20260429-company-rail-3" />{{end}}
+		{{if eq .CurrentPageKey "briefings"}}<link rel="stylesheet" href="/web/static/css/pages/briefings.css" />{{end}}
+		{{if eq .CurrentPageKey "briefing_detail"}}<link rel="stylesheet" href="/web/static/css/pages/briefing_detail.css" />{{end}}
+
+		<!-- Vue.js 3 CDN (Global Build) -->
+		<script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+		<script type="text/javascript" src="/web/static/js/util.js"></script>
+		<script type="text/javascript" src="/web/static/js/components/tooltip.js?v=20260507-4"></script>
+		<script type="text/javascript" src="/web/static/js/push.js?v=20260507-global-1"></script>
+	</head>
+
+	<body data-reader-page="{{.CurrentPageKey}}" class="bg-surface text-text min-h-screen flex relative{{if .CurrentPageKey}} page-{{.CurrentPageKey}}{{end}}{{if .ReaderUnified}} public-reader-shell{{end}}">
+
+	{{if .Menus}}
+		{{template "navbar" .}}
+	{{end}}
+
+	<main id="desktop-scroll-root" class="flex-1 overflow-y-auto flex flex-col overflow-hidden {{if .IsLoggedIn}} pt-[56px] md:pt-0 {{else if .Menus}} pt-[56px] md:pt-0 {{end}} md:ml-0{{if .ReaderUnified}} public-reader-scroll-root{{end}}">
+		{{if .Menus}}
+			{{template "sidebar" .}}
+		{{end}}
+
+		<div class="{{if .ReaderUnified}}public-page-shell l-flex-column{{else}}pb-6 md:pb-6 md:pt-0{{end}}">
+			{{block "content" .}}{{end}}
+			{{if and .ReaderUnified (ne .CurrentPageKey "news")}}
+			<div id="readerBookShell" class="reader-book-ui l-fixed-fill" hidden>
+				<section id="readerBookOverlay" class="reader-book-overlay l-fixed-fill" hidden aria-hidden="true" inert>
+					<button type="button" class="reader-book-overlay-backdrop l-absolute-fill tone-overlay" data-reader-close-overlay aria-label="목차 닫기"></button>
+					<div class="reader-book-overlay-panel l-side-panel l-grid sh-card tone-dark-panel">
+						<div class="reader-book-overlay-head l-split-start">
+							<div>
+								<h2>페이지 목차</h2>
+							</div>
+							<button type="button" class="reader-book-overlay-close l-center-control sh-button-pill tone-dark-action" data-reader-close-overlay>닫기</button>
+						</div>
+						<ol id="readerBookOutline" class="reader-book-outline l-grid"></ol>
+					</div>
+				</section>
+				<div class="reader-book-bottom l-bottom-fixed l-grid">
+					<div class="reader-book-bottom-progress l-split sh-card tone-dark-panel">
+						<div class="reader-book-progress-copy l-stack">
+							<strong id="readerBookCurrentTitle" class="reader-book-progress-title l-text-truncate tone-on-dark"></strong>
+						</div>
+						<span id="readerBookProgress" class="reader-book-progress-value l-center-control sh-pill tone-dark-action"></span>
+					</div>
+					<div class="reader-book-bottom-actions l-grid-actions-3">
+						<button type="button" id="readerBookPrev" class="reader-book-action l-center-control sh-button-pill tone-dark-action">이전</button>
+						<button type="button" id="readerBookMenu" class="reader-book-action l-center-control sh-button-pill tone-dark-action">목차</button>
+						<button type="button" id="readerBookNext" class="reader-book-action l-center-control sh-button-pill tone-dark-action">다음</button>
+					</div>
+				</div>
+			</div>
+			<script>
+				(function () {
+					const body = document.body;
+					if (!body.classList.contains("public-reader-shell") || body.classList.contains("news-reader-page")) {
+						return;
+					}
+
+					const readerRoot = document.querySelector(".reader-unified-root");
+					const main = readerRoot?.querySelector(".reader-unified-main");
+					const scrollRoot = document.getElementById("desktop-scroll-root");
+					const shell = document.getElementById("readerBookShell");
+					const overlay = document.getElementById("readerBookOverlay");
+					const outline = document.getElementById("readerBookOutline");
+					const currentTitle = document.getElementById("readerBookCurrentTitle");
+					const progress = document.getElementById("readerBookProgress");
+					const prevButton = document.getElementById("readerBookPrev");
+					const nextButton = document.getElementById("readerBookNext");
+					const menuButton = document.getElementById("readerBookMenu");
+					if (!readerRoot || !main || !scrollRoot || !shell || !overlay || !outline || !currentTitle || !progress || !prevButton || !nextButton || !menuButton) {
+						return;
+					}
+
+					let chapters = [];
+					let heroChapter = null;
+					let mainChapters = [];
+					let currentIndex = 0;
+					let overlayOpen = false;
+					let overlayReturnFocus = null;
+					let mutationObserver = null;
+
+					const lockTopLevelAccordions = () => {
+						main.querySelectorAll(":scope > [data-reader-chapter] > details.story-accordion").forEach((details) => {
+							details.open = true;
+							if (details.dataset.readerAccordionLocked === "true") {
+								return;
+							}
+							details.dataset.readerAccordionLocked = "true";
+							details.addEventListener("toggle", () => {
+								if (!details.open) {
+									window.requestAnimationFrame(() => {
+										details.open = true;
+									});
+								}
+							});
+						});
+					};
+
+					const resolveChapterTitle = (node, index) => {
+						const explicitTitle = `${node.dataset.readerTitle || ""}`.trim();
+						if (explicitTitle) {
+							return explicitTitle;
+						}
+						const heading = node.querySelector("[data-reader-heading], .section-title, h1, h2, h3");
+						const headingText = `${heading?.textContent || ""}`.trim();
+						return headingText || `섹션 ${index + 1}`;
+					};
+					const resolveChapterShortTitle = (node, index) => {
+						const explicitShortTitle = `${node.dataset.readerShortTitle || ""}`.trim();
+						if (explicitShortTitle) {
+							return explicitShortTitle;
+						}
+						return resolveChapterTitle(node, index);
+					};
+
+					const resolveChapterMeta = (node) => {
+						const explicitMeta = `${node.dataset.readerMeta || ""}`.trim();
+						if (explicitMeta) {
+							return explicitMeta;
+						}
+						const note = node.querySelector(".section-note, .text-text-muted, .text-text-3, .text-xs, .text-sm");
+						const noteText = `${note?.textContent || ""}`.replace(/\s+/g, " ").trim();
+						if (!noteText) {
+							return "";
+						}
+						return noteText.length > 72 ? noteText.slice(0, 72).trim() + "..." : noteText;
+					};
+
+					const updateOffsets = () => {
+						const isMobile = window.innerWidth < 768;
+						const nav = isMobile ? document.getElementById("navbar") : document.getElementById("desktop-topnav-app");
+						const topOffset = nav ? Math.ceil(nav.getBoundingClientRect().height) : (isMobile ? 56 : 44);
+						const bottomOffset = isMobile ? 122 : 108;
+						body.style.setProperty("--reader-book-top-offset", `${topOffset}px`);
+						body.style.setProperty("--reader-book-bottom-height", `${bottomOffset}px`);
+						body.style.setProperty("--reader-book-scroll-padding", `${topOffset + 14}px`);
+						body.style.setProperty("--reader-book-chapter-offset", `${topOffset + bottomOffset + 38}px`);
+					};
+					const isFocusInsideNode = (node) => (
+						!!node &&
+						document.activeElement instanceof HTMLElement &&
+						node.contains(document.activeElement)
+					);
+					const moveFocusToChapter = (node) => {
+						if (!node || typeof node.focus !== "function") {
+							return;
+						}
+						node.focus({ preventScroll: true });
+					};
+
+					const setActivePage = (index, options = {}) => {
+						if (!chapters[index]) {
+							return;
+						}
+						const resetScroll = options.resetScroll !== false;
+						const previous = chapters[currentIndex] || null;
+						currentIndex = index;
+						const active = chapters[currentIndex];
+						const heroActive = !!heroChapter && active.node === heroChapter;
+						const shouldMoveFocus = !!previous && previous.node !== active.node && isFocusInsideNode(previous.node);
+
+						if (heroChapter && heroActive) {
+							heroChapter.classList.add("is-active");
+							heroChapter.removeAttribute("inert");
+							heroChapter.removeAttribute("aria-hidden");
+						}
+						if (!heroActive) {
+							main.classList.add("is-active");
+							main.removeAttribute("inert");
+							main.removeAttribute("aria-hidden");
+							mainChapters.forEach((node, chapterIndex) => {
+								const globalIndex = heroChapter ? chapterIndex + 1 : chapterIndex;
+								if (globalIndex === currentIndex) {
+									node.classList.add("is-active");
+									node.removeAttribute("inert");
+									node.removeAttribute("aria-hidden");
+								}
+							});
+						}
+						if (shouldMoveFocus) {
+							moveFocusToChapter(active.node);
+						}
+
+						if (heroChapter) {
+							heroChapter.classList.toggle("is-active", heroActive);
+							heroActive ? heroChapter.removeAttribute("inert") : heroChapter.setAttribute("inert", "");
+							heroChapter.removeAttribute("aria-hidden");
+							if (resetScroll && heroActive) {
+								heroChapter.scrollTop = 0;
+							}
+						}
+
+						main.classList.toggle("is-active", !heroActive);
+						heroActive ? main.setAttribute("inert", "") : main.removeAttribute("inert");
+						main.removeAttribute("aria-hidden");
+
+						mainChapters.forEach((node, chapterIndex) => {
+							const globalIndex = heroChapter ? chapterIndex + 1 : chapterIndex;
+							const isActive = !heroActive && globalIndex === currentIndex;
+							node.classList.toggle("is-active", isActive);
+							isActive ? node.removeAttribute("inert") : node.setAttribute("inert", "");
+							node.removeAttribute("aria-hidden");
+							if (resetScroll && isActive) {
+								node.scrollTop = 0;
+							}
+						});
+
+						if (options.closeMenu) {
+							closeOverlay();
+						}
+
+						renderState();
+					};
+
+					const getOverlayRestoreFocusTarget = () => {
+						if (overlayReturnFocus && overlayReturnFocus.isConnected && !overlayReturnFocus.hidden) {
+							return overlayReturnFocus;
+						}
+						if (menuButton && menuButton.isConnected && !menuButton.hidden) {
+							return menuButton;
+						}
+						return null;
+					};
+
+					const closeOverlay = (options = {}) => {
+						const restoreFocus = options.restoreFocus !== false;
+						if (overlay.contains(document.activeElement)) {
+							const target = restoreFocus ? getOverlayRestoreFocusTarget() : null;
+							if (target && typeof target.focus === "function") {
+								target.focus({ preventScroll: true });
+							} else if (document.activeElement && typeof document.activeElement.blur === "function") {
+								document.activeElement.blur();
+							}
+						}
+						overlayOpen = false;
+						overlay.classList.remove("is-open");
+						overlay.setAttribute("inert", "");
+						overlay.setAttribute("aria-hidden", "true");
+						overlay.hidden = true;
+						document.documentElement.style.overflow = "";
+						document.body.style.overflow = "";
+					};
+
+					const openOverlay = () => {
+						overlayReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : menuButton;
+						overlayOpen = true;
+						overlay.hidden = false;
+						overlay.classList.add("is-open");
+						overlay.removeAttribute("inert");
+						overlay.setAttribute("aria-hidden", "false");
+						document.documentElement.style.overflow = "hidden";
+						document.body.style.overflow = "hidden";
+						const focusTarget = overlay.querySelector("[data-reader-close-overlay], .reader-book-outline-button, button, [href], [tabindex]:not([tabindex='-1'])");
+						if (focusTarget && typeof focusTarget.focus === "function") {
+							window.requestAnimationFrame(() => focusTarget.focus({ preventScroll: true }));
+						}
+					};
+
+					const renderOutline = () => {
+						outline.innerHTML = "";
+						chapters.forEach((chapter, index) => {
+							const item = document.createElement("li");
+							const button = document.createElement("button");
+							button.type = "button";
+							button.className = `reader-book-outline-button l-grid sh-card tone-dark-action${index === currentIndex ? " is-active" : ""}`;
+							button.innerHTML = `
+								<span class="reader-book-outline-index tone-on-dark-muted">섹션 ${String(index + 1).padStart(2, "0")}</span>
+								<strong class="reader-book-outline-title tone-on-dark"></strong>
+								<span class="reader-book-outline-meta tone-on-dark-soft"></span>
+							`;
+							button.querySelector(".reader-book-outline-title").textContent = chapter.title;
+							button.querySelector(".reader-book-outline-meta").textContent = chapter.meta || "이 페이지로 이동";
+							button.addEventListener("click", () => {
+								setActivePage(index, { closeMenu: true });
+							});
+							item.appendChild(button);
+							outline.appendChild(item);
+						});
+					};
+
+					const renderState = () => {
+						if (!chapters.length) {
+							currentTitle.textContent = "";
+							progress.textContent = "";
+							prevButton.disabled = true;
+							nextButton.disabled = true;
+							return;
+						}
+						currentTitle.textContent = chapters[currentIndex]?.shortTitle || chapters[currentIndex]?.title || "";
+						progress.textContent = `${currentIndex + 1} / ${chapters.length}`;
+						prevButton.disabled = currentIndex <= 0;
+						nextButton.disabled = currentIndex >= chapters.length - 1;
+						renderOutline();
+					};
+
+					const goToChapterById = (id) => {
+						const target = chapters.findIndex((chapter) => chapter.node.id === id);
+						if (target >= 0) {
+							setActivePage(target, { closeMenu: true });
+						}
+					};
+
+					const rebuildChapters = () => {
+						const previousTitle = chapters[currentIndex]?.title || "";
+						lockTopLevelAccordions();
+						heroChapter = readerRoot.querySelector(":scope > .page-hero[data-reader-chapter]");
+						mainChapters = Array.from(main.children).filter((node) => node.nodeType === 1 && node.hasAttribute("data-reader-chapter"));
+						const nextChapters = [];
+						if (heroChapter) {
+							nextChapters.push(heroChapter);
+						}
+						main.classList.add("l-fill-pane");
+						nextChapters.push(...mainChapters);
+						nextChapters.forEach((node) => {
+							node.classList.add("reader-book-chapter", "l-fill-pane", "l-scroll-y");
+							node.setAttribute("tabindex", "-1");
+						});
+						if (heroChapter) {
+							heroChapter.classList.add("reader-book-hero", "l-fill-pane", "l-scroll-y");
+						}
+						chapters = nextChapters.map((node, index) => ({
+							node,
+							index,
+							title: resolveChapterTitle(node, index),
+							shortTitle: resolveChapterShortTitle(node, index),
+							meta: resolveChapterMeta(node),
+						}));
+						if (chapters.length < 2) {
+							shell.hidden = true;
+							body.classList.remove("reader-book-mode");
+							closeOverlay();
+							if (heroChapter) {
+								heroChapter.classList.remove("is-active");
+								heroChapter.removeAttribute("inert");
+								heroChapter.removeAttribute("aria-hidden");
+							}
+							main.classList.remove("is-active");
+							main.classList.remove("l-fill-pane");
+							main.removeAttribute("inert");
+							main.removeAttribute("aria-hidden");
+							mainChapters.forEach((node) => {
+								node.classList.remove("is-active");
+								node.removeAttribute("inert");
+								node.removeAttribute("aria-hidden");
+							});
+							return;
+						}
+						body.classList.add("reader-book-mode");
+						shell.hidden = false;
+						const restoredIndex = chapters.findIndex((chapter) => chapter.title === previousTitle);
+						currentIndex = restoredIndex >= 0 ? restoredIndex : Math.min(currentIndex, chapters.length - 1);
+						setActivePage(currentIndex, { resetScroll: false });
+					};
+
+					prevButton.addEventListener("click", () => setActivePage(currentIndex - 1));
+					nextButton.addEventListener("click", () => setActivePage(currentIndex + 1));
+					menuButton.addEventListener("click", () => {
+						if (overlayOpen) {
+							closeOverlay();
+							return;
+						}
+						openOverlay();
+					});
+
+					overlay.querySelectorAll("[data-reader-close-overlay]").forEach((button) => {
+						button.addEventListener("click", closeOverlay);
+					});
+
+					document.addEventListener("keydown", (event) => {
+						if (event.key === "Escape") {
+							closeOverlay();
+						}
+						if (overlayOpen) {
+							return;
+						}
+						const tagName = `${event.target?.tagName || ""}`.toLowerCase();
+						if (tagName === "input" || tagName === "textarea" || tagName === "select") {
+							return;
+						}
+						if (event.key === "ArrowLeft") {
+							event.preventDefault();
+							setActivePage(currentIndex - 1);
+						}
+						if (event.key === "ArrowRight") {
+							event.preventDefault();
+							setActivePage(currentIndex + 1);
+						}
+					});
+
+					readerRoot.addEventListener("click", (event) => {
+						const trigger = event.target.closest("[data-reader-goto]");
+						if (!trigger) {
+							return;
+						}
+						const targetId = `${trigger.getAttribute("data-reader-goto") || ""}`.trim();
+						if (!targetId) {
+							return;
+						}
+						window.requestAnimationFrame(() => {
+							goToChapterById(targetId);
+						});
+					});
+
+					window.addEventListener("reader-book-goto", (event) => {
+						const targetId = `${event?.detail?.id || ""}`.trim();
+						if (!targetId) {
+							return;
+						}
+						window.requestAnimationFrame(() => {
+							goToChapterById(targetId);
+						});
+					});
+
+					window.addEventListener("resize", () => {
+						updateOffsets();
+						setActivePage(currentIndex, { resetScroll: false });
+					});
+
+					const requestReaderRebuild = () => {
+						window.requestAnimationFrame(() => {
+							updateOffsets();
+							rebuildChapters();
+						});
+					};
+
+					mutationObserver = new MutationObserver(requestReaderRebuild);
+					mutationObserver.observe(main, { childList: true, subtree: false });
+					window.addEventListener("reader-book-rebuild", requestReaderRebuild);
+
+					updateOffsets();
+					rebuildChapters();
+				})();
+			</script>
+			{{end}}
+		</div>
+
+		<div id="globalFooterWrap" class="pb-6">
+			<div id="globalFooterShell" class="w-full footer-shell px-4 py-3 flex flex-wrap items-center justify-between gap-3 text-xs text-text-muted">
+				<div class="flex flex-wrap items-center gap-3">
+					<span class="font-semibold text-text">사이트</span>
+					<span>사이트 설명</span>
+				</div>
+				<div class="flex flex-wrap items-center gap-3">
+				<a href="/privacy" class="hover:text-primary transition">개인정보처리방침</a>
+				{{if and .AdSenseEnabled .AdSenseClientID}}
+				<span>광고 제공: Google AdSense</span>
+				{{end}}
+				</div>
+			</div>
+		</div>
+	</main>
+	<script>
+		(function () {
+
+
+		})();
+	</script>
+
+</body>
+</html>
+{{end}}

@@ -1,0 +1,112 @@
+{{define "navbar"}}
+<nav class="fixed top-0 left-0 right-0 z-50 shadow-lg md:hidden" id="navbar">
+  <!-- 메인 헤더 -->
+  <div class="flex items-center justify-between px-4 py-3">
+    <!-- 로고 -->
+    <a href="/" class="flex items-center gap-2.5">
+      <img src="/web/static/img/pwa-192.png" alt="사이트 logo" class="w-9 h-9 rounded-xl object-cover ring-1 ring-white/15" />
+      <span class="mobile-brand-title block font-bold text-lg leading-none">사이트</span>
+    </a>
+
+    <div class="flex items-center gap-2">
+      <!-- 메뉴 버튼 -->
+      <button @click="toggleNavbar()" class="mobile-menu-toggle p-2 rounded-lg focus:outline-none transition-colors">
+        <svg v-if="!navbarOpen" class="mobile-menu-icon w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+        </svg>
+        <svg v-else class="mobile-menu-icon w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <div v-show="navbarOpen" class="mobile-menu-backdrop" @click="closeNavbar"></div>
+  <div v-show="navbarOpen" class="mobile-menu-panel">
+    <div class="mobile-menu-grid">
+      {{range .Menus}}
+        {{if and (ne .Label "") (ne .Label "없음")}}
+          {{range .Items}}
+            {{if and (ne .Href "/") (ne .Label "홈")}}
+            <a href="{{.Href}}" @click="closeNavbar" :class="['mobile-menu-link', linkClass('{{.Href}}') ? 'mobile-menu-link-active' : '']">
+              <span class="mobile-menu-link-label">{{.Label}}</span>
+            </a>
+            {{end}}
+          {{end}}
+        {{else}}
+          {{range .Items}}
+            {{if and (ne .Href "/") (ne .Label "홈")}}
+            <a href="{{.Href}}" @click="closeNavbar" :class="['mobile-menu-link', linkClass('{{.Href}}') ? 'mobile-menu-link-active' : '']">
+              <span class="mobile-menu-link-label">{{.Label}}</span>
+            </a>
+            {{end}}
+          {{end}}
+        {{end}}
+      {{end}}
+    </div>
+  </div>
+</nav>
+<script>
+(function () {
+  const { createApp, reactive, computed, onMounted, onBeforeUnmount } = Vue;
+
+  const menuEntries = [
+    {{range .Menus}}
+      {{range .Items}}
+      { href: {{printf "%q" .Href}}, label: {{printf "%q" .Label}} },
+      {{end}}
+    {{end}}
+  ];
+
+  createApp({
+    setup() {
+      const state = reactive({
+        currentPath: window.location.pathname,
+        navbarOpen: false,
+      });
+
+      const toggleNavbar = () => {
+        state.navbarOpen = !state.navbarOpen;
+        document.documentElement.style.overflow = state.navbarOpen ? 'hidden' : '';
+        document.body.style.overflow = state.navbarOpen ? 'hidden' : '';
+      };
+
+      const closeNavbar = () => {
+        state.navbarOpen = false;
+        document.documentElement.style.overflow = '';
+        document.body.style.overflow = '';
+      };
+
+      const isRouteActive = (href) => {
+        const target = `${href || ''}`.trim();
+        const current = `${state.currentPath || ''}`.trim();
+        if (!target) return false;
+        if (target === '/') return current === '/';
+        return current === target || current.startsWith(target + '/');
+      };
+
+      const linkClass = (href) => {
+        const isActive = isRouteActive(href);
+        return isActive ? 'mobile-active' : '';
+      };
+
+      onMounted(() => {
+      });
+
+      onBeforeUnmount(() => {
+        document.documentElement.style.overflow = '';
+        document.body.style.overflow = '';
+      });
+
+      return {
+        toggleNavbar,
+        closeNavbar,
+        linkClass,
+        navbarOpen: computed(() => state.navbarOpen),
+      };
+    }
+  }).mount("#navbar");
+})();
+</script>
+{{end}}
+

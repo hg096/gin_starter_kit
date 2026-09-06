@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	stderrors "errors"
 	"fmt"
-	"gin_starter/internal/infrastructure/database"
+	"gin_starter/pkg/db/database"
 	appErrors "gin_starter/pkg/errors"
 	"gin_starter/pkg/logger"
 	"sort"
@@ -106,7 +106,7 @@ func (r *chatRepository) EnsureSchema() error {
 		createChatRoomReadsTableSQL,
 	}
 	for _, query := range queries {
-		if _, err := r.base.Exec(query); err != nil {
+		if _, err := r.base.ExecSchema(query); err != nil {
 			logger.Error("failed to ensure chat schema: %v", err)
 			return appErrors.Wrap(err, "DATABASE_ERROR", "failed to ensure chat schema")
 		}
@@ -132,21 +132,29 @@ func (r *chatRepository) EnsureDefaultAdminRoom() error {
 		if err != nil {
 			return appErrors.Wrap(err, "DATABASE_ERROR", "failed to load admin users for chat room seed")
 		}
-		defer rows.Close()
 
+		adminUserIDs := make([]string, 0, 16)
 		for rows.Next() {
 			var userID string
 			if scanErr := rows.Scan(&userID); scanErr != nil {
+				rows.Close()
 				return appErrors.Wrap(scanErr, "DATABASE_ERROR", "failed to map admin user for chat room seed")
 			}
+			adminUserIDs = append(adminUserIDs, userID)
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return appErrors.Wrap(err, "DATABASE_ERROR", "failed to iterate admin users for chat room seed")
+		}
+		if err := rows.Close(); err != nil {
+			return appErrors.Wrap(err, "DATABASE_ERROR", "failed to close admin users cursor")
+		}
+
+		for _, userID := range adminUserIDs {
 			if err := r.upsertRoomMemberTx(tx, AdminLoungeRoomKey, userID); err != nil {
 				return err
 			}
 		}
-		if err := rows.Err(); err != nil {
-			return appErrors.Wrap(err, "DATABASE_ERROR", "failed to iterate admin users for chat room seed")
-		}
-
 		return nil
 	})
 }
@@ -520,13 +528,13 @@ func (r *chatRepository) CreateMessage(roomKey, senderID, content string, parent
 			insertData["crm_parent_idx"] = *parentID
 		}
 
-		messageID, err := r.base.InsertTx(tx, "_chat_room_messages", insertData)
+		messageID, err := r.base.Tx(tx).Insert("_chat_room_messages", insertData)
 		if err != nil {
 			return appErrors.Wrap(err, "DATABASE_ERROR", "failed to create chat message")
 		}
 		createdMessageID = messageID
 
-		affected, err := r.base.UpdateTx(tx, "_chat_rooms", map[string]interface{}{
+		affected, err := r.base.Tx(tx).Update("_chat_rooms", map[string]interface{}{
 			"cr_updated_at": time.Now().Round(0),
 		}, "cr_key = ?", roomKey)
 		if err != nil {
@@ -680,7 +688,7 @@ func (r *chatRepository) upsertRoomTx(tx *sql.Tx, roomKey, roomType, roomName, c
 		"cr_created_by": createdBy,
 		"cr_updated_at": now,
 	}
-	affected, err := r.base.UpdateTx(tx, "_chat_rooms", updateData, "cr_key = ?", roomKey)
+	affected, err := r.base.Tx(tx).Update("_chat_rooms", updateData, "cr_key = ?", roomKey)
 	if err != nil {
 		return appErrors.Wrap(err, "DATABASE_ERROR", "failed to update chat room")
 	}
@@ -696,15 +704,14 @@ func (r *chatRepository) upsertRoomTx(tx *sql.Tx, roomKey, roomType, roomName, c
 		"cr_created_at": now,
 		"cr_updated_at": now,
 	}
-	if _, err := r.base.InsertTx(tx, "_chat_rooms", insertData); err != nil && !isDuplicateKeyError(err) {
+	if _, err := r.base.Tx(tx).Insert("_chat_rooms", insertData); err != nil && !isDuplicateKeyError(err) {
 		return appErrors.Wrap(err, "DATABASE_ERROR", "failed to create chat room")
 	}
 	return nil
 }
 
 func (r *chatRepository) upsertRoomMemberTx(tx *sql.Tx, roomKey, userID string) error {
-	if _, err := r.base.ExecTx(
-		tx,
+	if _, err := r.base.Tx(tx).Exec(
 		`INSERT INTO _chat_room_members (crm_joined_at, crm_room_key, crm_user_id)
 		 VALUES (?, ?, ?)
 		 ON DUPLICATE KEY UPDATE crm_joined_at = crm_joined_at`,

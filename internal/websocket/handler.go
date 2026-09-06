@@ -2,14 +2,14 @@ package websocket
 
 import (
 	"gin_starter/internal/config"
-	"gin_starter/internal/infrastructure/database"
-	"gin_starter/internal/middleware"
+	"gin_starter/pkg/db/database"
 	appErrors "gin_starter/pkg/errors"
 	"gin_starter/pkg/logger"
+	"gin_starter/pkg/middleware"
 	"gin_starter/pkg/response"
+	"gin_starter/pkg/utils"
 	"net/http"
 	"regexp"
-	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -197,8 +197,8 @@ func (h *Handler) ListChatMessages(c *gin.Context) {
 		return
 	}
 
-	limit, _ := strconv.Atoi(strings.TrimSpace(c.DefaultQuery("limit", "50")))
-	beforeID, _ := strconv.ParseInt(strings.TrimSpace(c.DefaultQuery("before_id", "0")), 10, 64)
+	limit := chatQueryNumeric[int](c, "limit", "50", 50)
+	beforeID := chatQueryNumeric[int64](c, "before_id", "0", 0)
 
 	messages, err := h.chatService.ListMessages(userID, roomKey, limit, beforeID)
 	if err != nil {
@@ -207,6 +207,14 @@ func (h *Handler) ListChatMessages(c *gin.Context) {
 	}
 
 	response.Success(c, gin.H{"messages": messages})
+}
+
+func chatQueryNumeric[T utils.Numeric](c *gin.Context, key string, defaultRaw string, fallback T) T {
+	value, err := utils.StringToNumeric[T](strings.TrimSpace(c.DefaultQuery(key, defaultRaw)))
+	if err != nil {
+		return fallback
+	}
+	return value
 }
 
 // CreateChatMessage creates a chat message or reply(comment) in room.

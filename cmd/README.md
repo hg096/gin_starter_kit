@@ -60,9 +60,9 @@ import (
     "syscall"
     "time"
 
-    "gin_starter/api/routes"
+    "gin_starter/internal/api/routes"
     "gin_starter/internal/config"
-    "gin_starter/internal/infrastructure/database"
+    "gin_starter/pkg/db/database"
     "gin_starter/pkg/logger"
 
     "github.com/gin-gonic/gin"
@@ -204,8 +204,8 @@ import (
     "syscall"
 
     "gin_starter/internal/config"
-    "gin_starter/internal/infrastructure/database"
-    "gin_starter/internal/infrastructure/queue"
+    "gin_starter/pkg/db/database"
+    "gin_starter/pkg/db/queue"
     "gin_starter/pkg/logger"
 )
 
@@ -289,7 +289,7 @@ import (
 
     "gin_starter/internal/config"
     "gin_starter/internal/domain/user"
-    "gin_starter/internal/infrastructure/database"
+    "gin_starter/pkg/db/database"
     "gin_starter/pkg/logger"
 )
 
@@ -370,7 +370,7 @@ import (
     "os"
 
     "gin_starter/internal/config"
-    "gin_starter/internal/infrastructure/database"
+    "gin_starter/pkg/db/database"
     "gin_starter/pkg/logger"
 )
 

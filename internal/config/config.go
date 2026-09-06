@@ -1,10 +1,10 @@
 package config
 
 import (
+	"gin_starter/pkg/utils"
 	"log"
 	"net/url"
 	"os"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -201,7 +201,7 @@ func (c *Config) IsAllowedOrigin(origin string) bool {
 	if c != nil && c.IsDevelopment() {
 		parsed, err := url.Parse(origin)
 		if err == nil {
-			host := strings.ToLower(strings.TrimSpace(parsed.Hostname()))
+			host := utils.TrimLower(parsed.Hostname())
 			port := strings.TrimSpace(parsed.Port())
 			if port == "" {
 				switch strings.ToLower(parsed.Scheme) {
@@ -242,7 +242,7 @@ func getEnv(key, defaultValue string) string {
 
 func getEnvAsInt(key string, defaultValue int) int {
 	valueStr := os.Getenv(key)
-	if value, err := strconv.Atoi(valueStr); err == nil {
+	if value, err := utils.StringToNumeric[int](strings.TrimSpace(valueStr)); err == nil {
 		return value
 	}
 	return defaultValue

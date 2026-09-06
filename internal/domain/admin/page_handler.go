@@ -3,7 +3,7 @@ package admin
 import (
 	"fmt"
 	"gin_starter/internal/config"
-	"gin_starter/internal/middleware"
+	"gin_starter/pkg/middleware"
 	"html/template"
 	"net/http"
 	"os"
