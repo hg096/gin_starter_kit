@@ -15,6 +15,28 @@ type Repository struct {
 	db *DB
 }
 
+// Mutator는 일반 DB와 트랜잭션 DB가 공유하는 변경 작업 함수셋이다.
+//
+// 도메인 코드는 tx 여부를 직접 분기하지 말고 Repository 또는 TxRepository를
+// 이 인터페이스로 들고 Insert/Update/Delete 같은 이름을 그대로 사용한다.
+type Mutator interface {
+	Insert(table string, data map[string]interface{}) (int64, error)
+	Update(table string, data map[string]interface{}, where string, whereArgs ...interface{}) (int64, error)
+	Delete(table string, where string, whereArgs ...interface{}) (int64, error)
+}
+
+// Store는 일반 DB와 트랜잭션 DB가 공유하는 기본 조회/변경 함수셋이다.
+//
+// 도메인 repository는 base/write를 나누어 들지 말고 Store 하나만 들고 쓴다.
+type Store interface {
+	Mutator
+	Tx(tx *sql.Tx) *TxRepository
+	QueryRow(query string, args ...interface{}) *sql.Row
+	Query(query string, args ...interface{}) (*sql.Rows, error)
+	Exists(table string, where string, whereArgs ...interface{}) (bool, error)
+	Count(table string, where string, whereArgs ...interface{}) (int64, error)
+}
+
 // Expr is a trusted SQL expression used by repository helpers.
 //
 // Use it only for static, internal SQL snippets such as CURRENT_TIMESTAMP,
@@ -25,12 +47,15 @@ var identifierPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 // TxRepository는 하나의 트랜잭션에 묶인 Repository view다.
 //
-// 새 트랜잭션 코드는 InsertTx/UpdateTx/DeleteTx보다 repo.Tx(tx).Insert(...)
-// 형태를 우선 사용한다. 트랜잭션 여부와 관계없이 같은 함수명으로 흐름을 읽기 위함이다.
+// 새 트랜잭션 코드는 repo.Tx(tx).Insert(...) 형태를 우선 사용한다.
+// 트랜잭션 여부와 관계없이 같은 함수명으로 흐름을 읽기 위함이다.
 type TxRepository struct {
 	repo *Repository
 	tx   *sql.Tx
 }
+
+type execFunc func(string, ...interface{}) (sql.Result, error)
+type queryRowFunc func(string, ...interface{}) *sql.Row
 
 func sortedMapKeys(data map[string]interface{}) []string {
 	keys := make([]string, 0, len(data))
@@ -122,6 +147,11 @@ func (r *Repository) Tx(tx *sql.Tx) *TxRepository {
 	return &TxRepository{repo: r, tx: tx}
 }
 
+// Tx 트랜잭션 전용 Repository view를 교체한다.
+func (q *TxRepository) Tx(tx *sql.Tx) *TxRepository {
+	return q.repo.Tx(tx)
+}
+
 // WithTx는 트랜잭션 안에서 같은 Repository 함수명을 사용할 수 있게 해준다.
 func (r *Repository) WithTx(fn func(q *TxRepository) error) error {
 	if fn == nil {
@@ -140,7 +170,8 @@ func (r *Repository) QueryRow(query string, args ...interface{}) *sql.Row {
 
 // QueryRow SELECT 단일 행 조회.
 func (q *TxRepository) QueryRow(query string, args ...interface{}) *sql.Row {
-	return q.repo.QueryRowTx(q.tx, query, args...)
+	logger.Debug("SQL Query (TX): %s, Args: %v", query, args)
+	return q.tx.QueryRow(query, args...)
 }
 
 // Query SELECT 다중 행 조회
@@ -189,16 +220,6 @@ func (q *TxRepository) Exec(query string, args ...interface{}) (sql.Result, erro
 	return q.repo.execTx(q.tx, "Repository.ExecTx", query, args...)
 }
 
-// ExecTx 검증된 커스텀 DML을 트랜잭션 안에서 실행.
-//
-// 기본 INSERT/UPDATE/DELETE는 r.Tx(tx).Insert/Update/Delete를 우선 사용한다.
-// CREATE/ALTER 등 schema 작업은 r.Tx(tx).ExecSchema를 사용한다.
-//
-// Deprecated: 새 코드는 r.Tx(tx).Exec(...)를 사용한다.
-func (r *Repository) ExecTx(tx *sql.Tx, query string, args ...interface{}) (sql.Result, error) {
-	return r.Tx(tx).Exec(query, args...)
-}
-
 // ExecSchema CREATE/ALTER 같은 schema 보정 SQL 실행.
 //
 // 실행 전 존재 여부를 먼저 확인해서 예상 가능한 duplicate column/key 에러가
@@ -208,13 +229,6 @@ func (r *Repository) ExecSchema(query string, args ...interface{}) (sql.Result, 
 		return nil, err
 	}
 	return r.exec("Repository.ExecSchema", query, args...)
-}
-
-// ExecSchemaTx CREATE/ALTER 같은 schema 보정 SQL을 트랜잭션 안에서 실행.
-//
-// Deprecated: 새 코드는 r.Tx(tx).ExecSchema(...)를 사용한다.
-func (r *Repository) ExecSchemaTx(tx *sql.Tx, query string, args ...interface{}) (sql.Result, error) {
-	return r.Tx(tx).ExecSchema(query, args...)
 }
 
 // ExecSchema CREATE/ALTER 같은 schema 보정 SQL을 트랜잭션 안에서 실행.
@@ -231,13 +245,6 @@ func (r *Repository) ExecUnsafe(query string, args ...interface{}) (sql.Result, 
 		return nil, errors.New("INVALID_QUERY", "빈 쿼리는 실행할 수 없습니다")
 	}
 	return r.exec("Repository.ExecUnsafe", query, args...)
-}
-
-// ExecTxUnsafe 검증 없이 트랜잭션 SQL 실행. 사용 전 반드시 더 명시적인 helper를 먼저 검토한다.
-//
-// Deprecated: 새 코드는 r.Tx(tx).ExecUnsafe(...)를 사용한다.
-func (r *Repository) ExecTxUnsafe(tx *sql.Tx, query string, args ...interface{}) (sql.Result, error) {
-	return r.Tx(tx).ExecUnsafe(query, args...)
 }
 
 // ExecUnsafe 검증 없이 트랜잭션 SQL 실행. 사용 전 반드시 더 명시적인 helper를 먼저 검토한다.
@@ -337,10 +344,14 @@ func hasMultipleStatements(query string) bool {
 	return strings.Contains(trimmed, ";")
 }
 
-// QueryRowTx 트랜잭션 내에서 단일 행 조회
-func (r *Repository) QueryRowTx(tx *sql.Tx, query string, args ...interface{}) *sql.Row {
-	logger.Debug("SQL Query (TX): %s, Args: %v", query, args)
-	return tx.QueryRow(query, args...)
+// IsMissingTableError reports whether err looks like a missing-table error from
+// MySQL, SQLite, or test doubles. Use it only for optional/bootstrap schema paths.
+func IsMissingTableError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "doesn't exist") || strings.Contains(msg, "no such table")
 }
 
 // Insert INSERT 쿼리 실행 및 ID 반환
@@ -353,11 +364,15 @@ func (q *TxRepository) Insert(table string, data map[string]interface{}) (int64,
 	return insertWithExec(q.Exec, table, data)
 }
 
-func insertWithExec(exec func(string, ...interface{}) (sql.Result, error), table string, data map[string]interface{}) (int64, error) {
+func insertWithExec(exec execFunc, table string, data map[string]interface{}) (int64, error) {
 	if len(data) == 0 {
 		return 0, errors.New("INVALID_PARAM", "INSERT 데이터가 없습니다")
 	}
 
+	quotedTable, err := quoteIdentifier(table)
+	if err != nil {
+		return 0, err
+	}
 	columns, placeholders, values, err := buildInsertParts(data)
 	if err != nil {
 		return 0, err
@@ -365,7 +380,7 @@ func insertWithExec(exec func(string, ...interface{}) (sql.Result, error), table
 
 	query := fmt.Sprintf(
 		"INSERT INTO %s (%s) VALUES (%s)",
-		table,
+		quotedTable,
 		strings.Join(columns, ", "),
 		strings.Join(placeholders, ", "),
 	)
@@ -393,11 +408,15 @@ func (q *TxRepository) Update(table string, data map[string]interface{}, where s
 	return updateWithExec(q.Exec, table, data, where, whereArgs...)
 }
 
-func updateWithExec(exec func(string, ...interface{}) (sql.Result, error), table string, data map[string]interface{}, where string, whereArgs ...interface{}) (int64, error) {
+func updateWithExec(exec execFunc, table string, data map[string]interface{}, where string, whereArgs ...interface{}) (int64, error) {
 	if len(data) == 0 {
 		return 0, errors.New("INVALID_PARAM", "업데이트할 데이터가 없습니다")
 	}
 
+	quotedTable, err := quoteIdentifier(table)
+	if err != nil {
+		return 0, err
+	}
 	setClauses, values, err := buildSetClauses(data)
 	if err != nil {
 		return 0, err
@@ -407,7 +426,7 @@ func updateWithExec(exec func(string, ...interface{}) (sql.Result, error), table
 
 	query := fmt.Sprintf(
 		"UPDATE %s SET %s WHERE %s",
-		table,
+		quotedTable,
 		strings.Join(setClauses, ", "),
 		where,
 	)
@@ -436,7 +455,7 @@ func (q *TxRepository) Upsert(table string, insertData map[string]interface{}, u
 	return upsertWithExec(q.Exec, table, insertData, updateData)
 }
 
-func upsertWithExec(exec func(string, ...interface{}) (sql.Result, error), table string, insertData map[string]interface{}, updateData map[string]interface{}) (int64, error) {
+func upsertWithExec(exec execFunc, table string, insertData map[string]interface{}, updateData map[string]interface{}) (int64, error) {
 	if len(insertData) == 0 {
 		return 0, errors.New("INVALID_PARAM", "INSERT 데이터가 없습니다")
 	}
@@ -447,6 +466,10 @@ func upsertWithExec(exec func(string, ...interface{}) (sql.Result, error), table
 		return 0, errors.New("INVALID_PARAM", "UPDATE 데이터가 없습니다")
 	}
 
+	quotedTable, err := quoteIdentifier(table)
+	if err != nil {
+		return 0, err
+	}
 	columns, placeholders, values, err := buildInsertParts(insertData)
 	if err != nil {
 		return 0, err
@@ -459,7 +482,7 @@ func upsertWithExec(exec func(string, ...interface{}) (sql.Result, error), table
 
 	query := fmt.Sprintf(
 		"INSERT INTO %s (%s) VALUES (%s) ON DUPLICATE KEY UPDATE %s",
-		table,
+		quotedTable,
 		strings.Join(columns, ", "),
 		strings.Join(placeholders, ", "),
 		strings.Join(updateClauses, ", "),
@@ -491,8 +514,12 @@ func (q *TxRepository) Delete(table string, where string, whereArgs ...interface
 	return deleteWithExec(q.Exec, table, where, whereArgs...)
 }
 
-func deleteWithExec(exec func(string, ...interface{}) (sql.Result, error), table string, where string, whereArgs ...interface{}) (int64, error) {
-	query := fmt.Sprintf("DELETE FROM %s WHERE %s", table, where)
+func deleteWithExec(exec execFunc, table string, where string, whereArgs ...interface{}) (int64, error) {
+	quotedTable, err := quoteIdentifier(table)
+	if err != nil {
+		return 0, err
+	}
+	query := fmt.Sprintf("DELETE FROM %s WHERE %s", quotedTable, where)
 
 	result, err := exec(query, whereArgs...)
 	if err != nil {
@@ -509,10 +536,23 @@ func deleteWithExec(exec func(string, ...interface{}) (sql.Result, error), table
 
 // Exists 레코드 존재 여부 확인
 func (r *Repository) Exists(table string, where string, whereArgs ...interface{}) (bool, error) {
-	query := fmt.Sprintf("SELECT EXISTS(SELECT 1 FROM %s WHERE %s)", table, where)
+	return existsWithQueryRow(r.QueryRow, table, where, whereArgs...)
+}
+
+// Exists 레코드 존재 여부 확인.
+func (q *TxRepository) Exists(table string, where string, whereArgs ...interface{}) (bool, error) {
+	return existsWithQueryRow(q.QueryRow, table, where, whereArgs...)
+}
+
+func existsWithQueryRow(queryRow queryRowFunc, table string, where string, whereArgs ...interface{}) (bool, error) {
+	quotedTable, err := quoteIdentifier(table)
+	if err != nil {
+		return false, err
+	}
+	query := fmt.Sprintf("SELECT EXISTS(SELECT 1 FROM %s WHERE %s)", quotedTable, where)
 
 	var exists bool
-	err := r.QueryRow(query, whereArgs...).Scan(&exists)
+	err = queryRow(query, whereArgs...).Scan(&exists)
 	if err != nil {
 		return false, errors.Wrap(err, "DATABASE_ERROR", "존재 여부 확인 실패")
 	}
@@ -522,13 +562,26 @@ func (r *Repository) Exists(table string, where string, whereArgs ...interface{}
 
 // Count 레코드 개수 조회
 func (r *Repository) Count(table string, where string, whereArgs ...interface{}) (int64, error) {
-	query := fmt.Sprintf("SELECT COUNT(*) FROM %s", table)
+	return countWithQueryRow(r.QueryRow, table, where, whereArgs...)
+}
+
+// Count 레코드 개수 조회.
+func (q *TxRepository) Count(table string, where string, whereArgs ...interface{}) (int64, error) {
+	return countWithQueryRow(q.QueryRow, table, where, whereArgs...)
+}
+
+func countWithQueryRow(queryRow queryRowFunc, table string, where string, whereArgs ...interface{}) (int64, error) {
+	quotedTable, err := quoteIdentifier(table)
+	if err != nil {
+		return 0, err
+	}
+	query := fmt.Sprintf("SELECT COUNT(*) FROM %s", quotedTable)
 	if strings.TrimSpace(where) != "" {
 		query = fmt.Sprintf("%s WHERE %s", query, where)
 	}
 
 	var count int64
-	err := r.QueryRow(query, whereArgs...).Scan(&count)
+	err = queryRow(query, whereArgs...).Scan(&count)
 	if err != nil {
 		return 0, errors.Wrap(err, "DATABASE_ERROR", "개수 조회 실패")
 	}
@@ -548,15 +601,23 @@ func (q *TxRepository) UpdateMath(table string, operations map[string]string, wh
 	return updateMathWithExec(q.Exec, table, operations, where, whereArgs...)
 }
 
-func updateMathWithExec(exec func(string, ...interface{}) (sql.Result, error), table string, operations map[string]string, where string, whereArgs ...interface{}) (int64, error) {
+func updateMathWithExec(exec execFunc, table string, operations map[string]string, where string, whereArgs ...interface{}) (int64, error) {
 	if len(operations) == 0 {
 		return 0, errors.New("INVALID_PARAM", "연산할 필드가 없습니다")
 	}
 
+	quotedTable, err := quoteIdentifier(table)
+	if err != nil {
+		return 0, err
+	}
 	setClauses := make([]string, 0, len(operations))
 	for col, op := range operations {
 		if len(op) < 2 {
 			return 0, errors.New("INVALID_PARAM", fmt.Sprintf("잘못된 연산 형식: %s", op))
+		}
+		quotedCol, err := quoteIdentifier(col)
+		if err != nil {
+			return 0, err
 		}
 
 		operator := string(op[0])
@@ -564,13 +625,13 @@ func updateMathWithExec(exec func(string, ...interface{}) (sql.Result, error), t
 
 		switch operator {
 		case "+":
-			setClauses = append(setClauses, fmt.Sprintf("%s = %s + %s", col, col, value))
+			setClauses = append(setClauses, fmt.Sprintf("%s = %s + %s", quotedCol, quotedCol, value))
 		case "-":
-			setClauses = append(setClauses, fmt.Sprintf("%s = %s - %s", col, col, value))
+			setClauses = append(setClauses, fmt.Sprintf("%s = %s - %s", quotedCol, quotedCol, value))
 		case "*":
-			setClauses = append(setClauses, fmt.Sprintf("%s = %s * %s", col, col, value))
+			setClauses = append(setClauses, fmt.Sprintf("%s = %s * %s", quotedCol, quotedCol, value))
 		case "/":
-			setClauses = append(setClauses, fmt.Sprintf("%s = %s / %s", col, col, value))
+			setClauses = append(setClauses, fmt.Sprintf("%s = %s / %s", quotedCol, quotedCol, value))
 		default:
 			return 0, errors.New("INVALID_PARAM", fmt.Sprintf("지원하지 않는 연산자: %s", operator))
 		}
@@ -578,7 +639,7 @@ func updateMathWithExec(exec func(string, ...interface{}) (sql.Result, error), t
 
 	query := fmt.Sprintf(
 		"UPDATE %s SET %s WHERE %s",
-		table,
+		quotedTable,
 		strings.Join(setClauses, ", "),
 		where,
 	)

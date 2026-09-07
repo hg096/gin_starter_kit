@@ -20,22 +20,16 @@ type Repository interface {
 }
 
 type repository struct {
-	base *database.Repository
-	tx   *database.TxRepository
+	db database.Store
 }
 
 // NewRepository 블로그 저장소 생성
 func NewRepository(db *database.DB) Repository {
-	return &repository{
-		base: database.NewRepository(db),
-	}
+	return &repository{db: database.NewRepository(db)}
 }
 
 func (r *repository) Tx(tx *sql.Tx) Repository {
-	return &repository{
-		base: r.base,
-		tx:   r.base.Tx(tx),
-	}
+	return &repository{db: r.db.Tx(tx)}
 }
 
 // Create 블로그 생성
@@ -48,7 +42,7 @@ func (r *repository) Create(blog *Blog) error {
 		"updated_at": time.Now(),
 	}
 
-	id, err := r.insert("_blog", data)
+	id, err := r.db.Insert("_blog", data)
 	if err != nil {
 		return err
 	}
@@ -65,7 +59,7 @@ func (r *repository) FindByID(id int64) (*Blog, error) {
 	`
 
 	var blog Blog
-	err := r.base.QueryRow(query, id).Scan(&blog.ID, &blog.Title, &blog.Content,
+	err := r.db.QueryRow(query, id).Scan(&blog.ID, &blog.Title, &blog.Content,
 		&blog.AuthorID, &blog.CreatedAt, &blog.UpdatedAt)
 	if err != nil {
 		return nil, err
@@ -79,7 +73,7 @@ func (r *repository) FindAll(page, limit int) ([]Blog, int64, error) {
 	pagination := utils.NewPagination(page, limit, 20, 100)
 
 	// 전체 개수 조회
-	total, err := r.base.Count("_blog", "")
+	total, err := r.db.Count("_blog", "")
 	if err != nil {
 		return nil, 0, err
 	}
@@ -92,7 +86,7 @@ func (r *repository) FindAll(page, limit int) ([]Blog, int64, error) {
 		LIMIT ? OFFSET ?
 	`
 
-	rows, err := r.base.Query(query, pagination.Limit, pagination.Offset)
+	rows, err := r.db.Query(query, pagination.Limit, pagination.Offset)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -116,7 +110,7 @@ func (r *repository) FindByAuthorID(authorID string, page, limit int) ([]Blog, i
 	pagination := utils.NewPagination(page, limit, 20, 100)
 
 	// 전체 개수 조회
-	total, err := r.base.Count("_blog", "author_id = ?", authorID)
+	total, err := r.db.Count("_blog", "author_id = ?", authorID)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -130,7 +124,7 @@ func (r *repository) FindByAuthorID(authorID string, page, limit int) ([]Blog, i
 		LIMIT ? OFFSET ?
 	`
 
-	rows, err := r.base.Query(query, authorID, pagination.Limit, pagination.Offset)
+	rows, err := r.db.Query(query, authorID, pagination.Limit, pagination.Offset)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -152,38 +146,17 @@ func (r *repository) FindByAuthorID(authorID string, page, limit int) ([]Blog, i
 // Update 블로그 수정
 func (r *repository) Update(id int64, updates map[string]interface{}) error {
 	updates["updated_at"] = time.Now()
-	_, err := r.update("_blog", updates, "id = ?", id)
+	_, err := r.db.Update("_blog", updates, "id = ?", id)
 	return err
 }
 
 // Delete 블로그 삭제
 func (r *repository) Delete(id int64) error {
-	_, err := r.delete("_blog", "id = ?", id)
+	_, err := r.db.Delete("_blog", "id = ?", id)
 	return err
 }
 
 // Exists 블로그 존재 여부 확인
 func (r *repository) Exists(id int64) (bool, error) {
-	return r.base.Exists("_blog", "id = ?", id)
-}
-
-func (r *repository) insert(table string, data map[string]interface{}) (int64, error) {
-	if r.tx != nil {
-		return r.tx.Insert(table, data)
-	}
-	return r.base.Insert(table, data)
-}
-
-func (r *repository) update(table string, data map[string]interface{}, where string, whereArgs ...interface{}) (int64, error) {
-	if r.tx != nil {
-		return r.tx.Update(table, data, where, whereArgs...)
-	}
-	return r.base.Update(table, data, where, whereArgs...)
-}
-
-func (r *repository) delete(table string, where string, whereArgs ...interface{}) (int64, error) {
-	if r.tx != nil {
-		return r.tx.Delete(table, where, whereArgs...)
-	}
-	return r.base.Delete(table, where, whereArgs...)
+	return r.db.Exists("_blog", "id = ?", id)
 }

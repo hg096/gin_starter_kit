@@ -7,7 +7,6 @@ import (
 	"gin_starter/pkg/errors"
 	"gin_starter/pkg/logger"
 	"gin_starter/pkg/utils"
-	"strings"
 	"time"
 )
 
@@ -28,20 +27,16 @@ type Repository interface {
 }
 
 type repository struct {
-	base *database.Repository
-	tx   *database.TxRepository
+	db database.Store
 }
 
 // NewRepository creates a user repository.
 func NewRepository(db *database.DB) Repository {
-	return &repository{base: database.NewRepository(db)}
+	return &repository{db: database.NewRepository(db)}
 }
 
 func (r *repository) Tx(tx *sql.Tx) Repository {
-	return &repository{
-		base: r.base,
-		tx:   r.base.Tx(tx),
-	}
+	return &repository{db: r.db.Tx(tx)}
 }
 
 func (r *repository) Create(user *User) error {
@@ -55,7 +50,7 @@ func (r *repository) Create(user *User) error {
 		"u_status":     normalizeStatus(user.Status),
 	}
 
-	_, err := r.insert("_user", data)
+	_, err := r.db.Insert("_user", data)
 	if err != nil {
 		logger.Error("failed to create user: %v", err)
 		return errors.Wrap(err, "USER_CREATE_FAILED", "failed to create user")
@@ -68,7 +63,7 @@ func (r *repository) FindByID(id string) (*User, error) {
 	query := `SELECT u_id, u_pass, u_name, u_email, u_auth_type, u_auth_level, COALESCE(u_status, 'active'), u_token_valid_after, u_re_token, u_regi_date
 			  FROM _user WHERE u_id = ?`
 
-	row := r.base.QueryRow(query, id)
+	row := r.db.QueryRow(query, id)
 	user, err := scanUser(row)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -85,7 +80,7 @@ func (r *repository) FindByEmail(email string) (*User, error) {
 	query := `SELECT u_id, u_pass, u_name, u_email, u_auth_type, u_auth_level, COALESCE(u_status, 'active'), u_token_valid_after, u_re_token, u_regi_date
 			  FROM _user WHERE u_email = ?`
 
-	row := r.base.QueryRow(query, email)
+	row := r.db.QueryRow(query, email)
 	user, err := scanUser(row)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -103,7 +98,7 @@ func (r *repository) FindAuthSnapshotByID(id string) (*AuthSnapshot, error) {
 
 	var snapshot AuthSnapshot
 	var tokenValidAfter sql.NullTime
-	err := r.base.QueryRow(query, id).Scan(&snapshot.ID, &snapshot.AuthType, &snapshot.AuthLevel, &snapshot.Status, &tokenValidAfter)
+	err := r.db.QueryRow(query, id).Scan(&snapshot.ID, &snapshot.AuthType, &snapshot.AuthLevel, &snapshot.Status, &tokenValidAfter)
 	if err == sql.ErrNoRows {
 		return nil, errors.ErrUserNotFound
 	}
@@ -126,7 +121,7 @@ func (r *repository) FindAuthSnapshotByID(id string) (*AuthSnapshot, error) {
 }
 
 func (r *repository) Update(id string, updates map[string]interface{}) error {
-	affected, err := r.update("_user", updates, "u_id = ?", id)
+	affected, err := r.db.Update("_user", updates, "u_id = ?", id)
 	if err != nil {
 		logger.Error("failed to update user (%s): %v", id, err)
 		return errors.Wrap(err, "USER_UPDATE_FAILED", "failed to update user")
@@ -139,7 +134,7 @@ func (r *repository) Update(id string, updates map[string]interface{}) error {
 }
 
 func (r *repository) Delete(id string) error {
-	affected, err := r.delete("_user", "u_id = ?", id)
+	affected, err := r.db.Delete("_user", "u_id = ?", id)
 	if err != nil {
 		logger.Error("failed to delete user (%s): %v", id, err)
 		return errors.Wrap(err, "USER_DELETE_FAILED", "failed to delete user")
@@ -152,7 +147,7 @@ func (r *repository) Delete(id string) error {
 }
 
 func (r *repository) Exists(id string) (bool, error) {
-	exists, err := r.base.Exists("_user", "u_id = ?", id)
+	exists, err := r.db.Exists("_user", "u_id = ?", id)
 	if err != nil {
 		logger.Error("failed to check user exists (%s): %v", id, err)
 		return false, errors.Wrap(err, "USER_EXISTS_CHECK_FAILED", "failed to check user existence")
@@ -182,9 +177,9 @@ func (r *repository) BumpTokenValidAfter(id string, at time.Time) error {
 
 func (r *repository) GetLevelPolicyEnabled() (bool, error) {
 	var raw sql.NullString
-	err := r.base.QueryRow(`SELECT setting_value FROM _a_system_settings WHERE setting_key = 'level_policy_enabled' LIMIT 1`).Scan(&raw)
+	err := r.db.QueryRow(`SELECT setting_value FROM _a_system_settings WHERE setting_key = 'level_policy_enabled' LIMIT 1`).Scan(&raw)
 	if err != nil {
-		if err == sql.ErrNoRows || isMissingTableError(err) {
+		if err == sql.ErrNoRows || database.IsMissingTableError(err) {
 			return true, nil
 		}
 		return false, errors.Wrap(err, "DATABASE_ERROR", "failed to read level policy setting")
@@ -199,27 +194,6 @@ func (r *repository) GetLevelPolicyEnabled() (bool, error) {
 	default:
 		return true, nil
 	}
-}
-
-func (r *repository) insert(table string, data map[string]interface{}) (int64, error) {
-	if r.tx != nil {
-		return r.tx.Insert(table, data)
-	}
-	return r.base.Insert(table, data)
-}
-
-func (r *repository) update(table string, data map[string]interface{}, where string, whereArgs ...interface{}) (int64, error) {
-	if r.tx != nil {
-		return r.tx.Update(table, data, where, whereArgs...)
-	}
-	return r.base.Update(table, data, where, whereArgs...)
-}
-
-func (r *repository) delete(table string, where string, whereArgs ...interface{}) (int64, error) {
-	if r.tx != nil {
-		return r.tx.Delete(table, where, whereArgs...)
-	}
-	return r.base.Delete(table, where, whereArgs...)
 }
 
 func scanUser(scanner interface {
@@ -267,12 +241,4 @@ func normalizeStatus(status string) string {
 		s = UserStatusActive
 	}
 	return s
-}
-
-func isMissingTableError(err error) bool {
-	if err == nil {
-		return false
-	}
-	msg := strings.ToLower(err.Error())
-	return strings.Contains(msg, "doesn't exist") || strings.Contains(msg, "no such table")
 }

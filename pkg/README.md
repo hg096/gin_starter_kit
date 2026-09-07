@@ -1,476 +1,126 @@
-# pkg/
+# pkg
 
-**외부에서 import 가능한** 재사용 가능한 패키지들입니다.
+외부 import가 가능한 공통 패키지 영역입니다. 특정 도메인의 업무 규칙은 `pkg`로 옮기지 않습니다.
 
-## 🎯 pkg vs internal
+## 구조
 
-| 구분 | pkg/ | internal/ |
-|------|------|-----------|
-| **외부 import** | ✅ 가능 | ❌ 불가능 |
-| **용도** | 범용 유틸리티 | 비즈니스 로직 |
-| **의존성** | 최소화 | 프로젝트 특화 |
-| **예시** | 로거, Validator | User, Blog 도메인 |
-
-## 📁 디렉토리 구조
-
-```
+```text
 pkg/
-├── response/    # 표준 API 응답
-├── validator/   # 입력 검증
-├── errors/      # 에러 관리
-└── logger/      # 로깅
+  authz/       인증 타입/권한 관련 공통 판별
+  db/          DB 연결, 공통 repository
+  errors/      애플리케이션 에러 타입
+  logger/      로깅
+  middleware/  Gin middleware
+  renderer/    template rendering helper
+  response/    표준 API 응답
+  utils/       중립 유틸
+  validator/   HTTP 입력 검증
 ```
 
----
+## 추가 기준
 
-## 📦 response/ - 표준 API 응답
+`pkg`에 넣어도 되는 코드:
 
-### 역할
-모든 API 응답을 일관된 형식으로 반환합니다.
+- 다른 도메인에서 2-3회 이상 반복됩니다.
+- 비즈니스 의미가 없습니다.
+- helper 이름이 호출부 의도를 더 잘 드러냅니다.
+- `internal/domain/*`를 import하지 않습니다.
 
-### 표준 응답 구조
+`pkg`에 넣지 않는 코드:
 
-```json
-{
-  "success": true,
-  "data": { ... },
-  "error": null,
-  "meta": { ... }
-}
+- 특정 도메인 정책입니다.
+- 한 기능에서만 사용됩니다.
+- 호출부 흐름을 숨깁니다.
+- 편의를 위해 내부 도메인 타입을 끌어옵니다.
+
+예:
+
+```text
+OK: utils.TrimLower, utils.HasText, utils.NewPagination
+NO: admin page group 정책, user 가입 정책, blog 권한 정책
 ```
 
-### 사용 예시
+## 자주 쓰는 패키지
+
+### response
+
+API 응답은 `pkg/response`를 우선 사용합니다.
 
 ```go
-import "gin_starter/pkg/response"
-
-// 성공 응답
-response.Success(c, gin.H{"user": user})
-
-// 생성 성공 (201)
-response.Created(c, createdItem)
-
-// 검증 에러 (422)
-response.ValidationError(c, errorMap)
-
-// 인증 에러 (401)
-response.Unauthorized(c, "인증이 필요합니다")
-
-// 권한 에러 (403)
-response.Forbidden(c, "접근 권한이 없습니다")
-
-// Not Found (404)
-response.NotFound(c, "리소스를 찾을 수 없습니다")
-
-// 서버 에러 (500)
-response.InternalError(c, "서버 오류가 발생했습니다")
-
-// 커스텀 에러
-response.Error(c, 400, "CUSTOM_ERROR", "메시지", details)
+response.Success(c, data)
+response.Created(c, data)
+response.BadRequest(c, "invalid request")
+response.ValidationError(c, result.GetErrorMap())
+response.FromError(c, err)
 ```
 
-### 확장 방법
+### validator
 
-새로운 응답 타입 추가:
-
-```go
-// pkg/response/response.go에 추가
-
-// TooManyRequests 429 에러
-func TooManyRequests(c *gin.Context, message string) {
-    Error(c, http.StatusTooManyRequests, "TOO_MANY_REQUESTS", message)
-}
-
-// Accepted 202 응답
-func Accepted(c *gin.Context, data interface{}) {
-    c.JSON(http.StatusAccepted, Response{
-        Success: true,
-        Data:    data,
-    })
-}
-```
-
----
-
-## 🔍 validator/ - 입력 검증
-
-### 역할
-HTTP 요청의 입력값을 검증합니다.
-
-### 기본 사용법
+HTTP 입력 검증은 handler에서 `validator.Validate`를 사용합니다.
 
 ```go
-import "gin_starter/pkg/validator"
-
-rules := []validator.Rule{
-    {
-        Field:    "email",
-        Label:    "이메일",
-        Required: true,
-        Pattern:  validator.PatternEmail,
-    },
-    {
-        Field:  "age",
-        Label:  "나이",
-        Min:    18,
-        Max:    120,
-    },
-    {
-        Field:   "username",
-        Label:   "사용자명",
-        Required: true,
-        MinLen:  3,
-        MaxLen:  20,
-        Pattern: validator.PatternAlphaNum,
-    },
-}
-
-result := validator.Validate(c, rules)
+result := validator.Validate(c, []validator.Rule{
+	{Field: "user_id", Label: "아이디", Required: true, MinLen: 3, MaxLen: 20, Pattern: validator.PatternAlphaNum},
+})
 if !result.Valid {
-    response.ValidationError(c, result.GetErrorMap())
-    return
-}
-
-// 검증된 값 사용
-email := result.Values["email"]
-```
-
-### 사용 가능한 패턴
-
-```go
-validator.PatternEmail       // 이메일
-validator.PatternNumber      // 숫자만
-validator.PatternDecimal     // 소수점 포함
-validator.PatternEnglish     // 영문
-validator.PatternKorean      // 한글
-validator.PatternKorEng      // 한글+영문
-validator.PatternKorEngNum   // 한글+영문+숫자
-validator.PatternAlphaNum    // 영숫자
-validator.PatternSlug        // URL 슬러그 (소문자+하이픈)
-validator.PatternURL         // URL
-validator.PatternPhone       // 전화번호
-```
-
-### 커스텀 검증
-
-```go
-rules := []validator.Rule{
-    {
-        Field:    "password",
-        Label:    "비밀번호",
-        Required: true,
-        Custom: func(value string) error {
-            // 비밀번호 강도 검사
-            if !hasUpperCase(value) {
-                return errors.New("대문자를 포함해야 합니다")
-            }
-            if !hasSpecialChar(value) {
-                return errors.New("특수문자를 포함해야 합니다")
-            }
-            return nil
-        },
-    },
+	response.ValidationError(c, result.GetErrorMap())
+	return
 }
 ```
 
-### 확장: 새 패턴 추가
+### utils
+
+반복 파싱/문자열 처리는 기존 helper를 먼저 확인합니다.
 
 ```go
-// pkg/validator/validator.go에 추가
-
-var (
-    PatternCreditCard = regexp.MustCompile(`^\d{4}-?\d{4}-?\d{4}-?\d{4}$`)
-    PatternZipCode    = regexp.MustCompile(`^\d{5}$`)
-)
+pagination := utils.PaginationFromQuery(c, 20, 100)
+ok := utils.HasText(value)
+status := utils.TrimLower(rawStatus)
+items := utils.UniqueStrings(values)
+id, err := utils.StringToNumeric[int64](raw)
 ```
 
----
+### db/database
 
-## ❌ errors/ - 에러 관리
-
-### 역할
-애플리케이션 전체의 에러를 일관되게 관리합니다.
-
-### 기본 사용법
+기본 CRUD는 명시 helper를 사용합니다.
 
 ```go
-import "gin_starter/pkg/errors"
-
-// 에러 생성
-err := errors.New("USER_NOT_FOUND", "사용자를 찾을 수 없습니다")
-
-// 에러 래핑 (기존 에러에 컨텍스트 추가)
-err := errors.Wrap(dbErr, "DATABASE_ERROR", "사용자 조회 실패")
-
-// 미리 정의된 에러 사용
-return errors.ErrUserNotFound
-return errors.ErrInvalidToken
-return errors.ErrUnauthorized
-
-// 메타데이터 추가
-err.WithMeta("user_id", userID)
-err.WithMeta("attempt", attemptCount)
+repo := database.NewRepository(db)
+id, err := repo.Insert("_table", data)
+affected, err := repo.Update("_table", updates, "id = ?", id)
+affected, err := repo.Delete("_table", "id = ?", id)
 ```
 
-### 미리 정의된 에러
+트랜잭션은 `WithTx`와 `TxRepository` view를 사용합니다.
 
 ```go
-// 일반
-errors.ErrInternal
-errors.ErrBadRequest
-errors.ErrNotFound
-errors.ErrUnauthorized
-errors.ErrForbidden
-errors.ErrConflict
-errors.ErrValidation
-
-// 데이터베이스
-errors.ErrDatabase
-errors.ErrDuplicateEntry
-errors.ErrRecordNotFound
-
-// 인증
-errors.ErrInvalidToken
-errors.ErrExpiredToken
-errors.ErrInvalidPassword
-
-// 사용자
-errors.ErrUserNotFound
-errors.ErrUserExists
-errors.ErrInvalidCredentials
+err := repo.WithTx(func(q *database.TxRepository) error {
+	if _, err := q.Insert("_table", data); err != nil {
+		return err
+	}
+	_, err := q.Update("_table", updates, "id = ?", id)
+	return err
+})
 ```
 
-### 에러 확인
+새 코드에서 `InsertTx`, `UpdateTx`, `DeleteTx` 접미사 함수는 만들거나 호출하지 않습니다.
 
-```go
-if errors.Is(err, errors.ErrUserNotFound) {
-    // 사용자 없음 처리
-}
+## SQL 실행 규칙
+
+- `Insert`, `Update`, `Delete`를 우선 사용합니다.
+- `Exec`는 helper로 표현하기 어려운 DML 전용입니다.
+- `ExecSchema`는 `CREATE`, `ALTER` 같은 schema 보정 전용입니다.
+- `ExecUnsafe`는 검증을 우회해야 하는 예외 상황에서만 사용합니다.
+- `UPDATE`, `DELETE` DML은 `WHERE` 없는 실행을 거부합니다.
+- 여러 SQL 문을 한 번에 실행하지 않습니다.
+
+## 테스트
+
+공통 패키지를 수정하면 관련 패키지 테스트 후 전체 테스트를 실행합니다.
+
+```powershell
+go test ./pkg/utils
+go test ./pkg/db/database
+go test ./pkg/middleware
+go test ./...
 ```
-
-### 확장: 새 에러 추가
-
-```go
-// pkg/errors/errors.go에 추가
-
-var (
-    // 주문 관련
-    ErrOrderNotFound    = New("ORDER_NOT_FOUND", "주문을 찾을 수 없습니다")
-    ErrOrderCancelled   = New("ORDER_CANCELLED", "취소된 주문입니다")
-
-    // 결제 관련
-    ErrPaymentFailed    = New("PAYMENT_FAILED", "결제에 실패했습니다")
-    ErrInsufficientFund = New("INSUFFICIENT_FUND", "잔액이 부족합니다")
-)
-```
-
----
-
-## 📝 logger/ - 로깅
-
-### 역할
-구조화된 로깅을 제공합니다.
-
-### 기본 사용법
-
-```go
-import "gin_starter/pkg/logger"
-
-// 레벨별 로깅
-logger.Debug("디버그 메시지: %s", value)
-logger.Info("정보 메시지: %s", value)
-logger.Warn("경고 메시지: %s", value)
-logger.Error("에러 발생: %v", err)
-logger.Fatal("치명적 에러: %v", err) // 프로그램 종료
-
-// 필드와 함께 로깅
-logger.WithField("user_id", userID).Info("로그인 성공")
-
-logger.WithFields(map[string]interface{}{
-    "user_id": userID,
-    "ip": ip,
-    "action": "login",
-}).Info("사용자 활동")
-```
-
-### 로그 레벨 설정
-
-```go
-// main.go에서
-import "gin_starter/pkg/logger"
-
-logger.SetLevel(logger.INFO)
-// 또는
-logger.SetLevelFromString("debug") // debug, info, warn, error, fatal
-```
-
-### 확장: 파일 로깅
-
-```go
-// pkg/logger/logger.go에 추가
-
-import "os"
-
-func SetOutputFile(filename string) error {
-    file, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-    if err != nil {
-        return err
-    }
-    log.SetOutput(file)
-    return nil
-}
-```
-
----
-
-## 🚀 새 패키지 추가 가이드
-
-### 1. 패키지 추가 기준
-
-다음 조건을 **모두** 만족하면 pkg/에 추가:
-
-- ✅ 다른 프로젝트에서도 사용 가능
-- ✅ 비즈니스 로직과 무관
-- ✅ 범용적인 기능
-- ✅ 외부 의존성 최소
-
-### 2. 추가 순서
-
-```bash
-# 1. 디렉토리 생성
-mkdir pkg/cache
-
-# 2. 파일 생성
-cd pkg/cache
-touch cache.go
-```
-
-### 3. 코드 작성 예시
-
-```go
-// pkg/cache/cache.go
-package cache
-
-import "time"
-
-// Interface 정의
-type Cache interface {
-    Get(key string) (interface{}, bool)
-    Set(key string, value interface{}, ttl time.Duration) error
-    Delete(key string) error
-}
-
-// 메모리 캐시 구현
-type memoryCache struct {
-    data map[string]cacheItem
-}
-
-type cacheItem struct {
-    value  interface{}
-    expiry time.Time
-}
-
-func NewMemoryCache() Cache {
-    return &memoryCache{
-        data: make(map[string]cacheItem),
-    }
-}
-
-func (c *memoryCache) Get(key string) (interface{}, bool) {
-    item, exists := c.data[key]
-    if !exists {
-        return nil, false
-    }
-
-    if time.Now().After(item.expiry) {
-        delete(c.data, key)
-        return nil, false
-    }
-
-    return item.value, true
-}
-
-func (c *memoryCache) Set(key string, value interface{}, ttl time.Duration) error {
-    c.data[key] = cacheItem{
-        value:  value,
-        expiry: time.Now().Add(ttl),
-    }
-    return nil
-}
-
-func (c *memoryCache) Delete(key string) error {
-    delete(c.data, key)
-    return nil
-}
-```
-
-### 4. README 작성
-
-```bash
-touch pkg/cache/README.md
-```
-
----
-
-## 📚 패키지 사용 원칙
-
-### DO ✅
-
-1. **재사용성 우선**
-   ```go
-   // ✅ 좋은 예 - 범용적
-   func ValidateEmail(email string) bool
-
-   // ✅ 좋은 예 - 프로젝트 무관
-   func FormatPhoneNumber(phone string) string
-   ```
-
-2. **명확한 Interface**
-   ```go
-   type Logger interface {
-       Info(msg string)
-       Error(msg string)
-   }
-   ```
-
-3. **최소 의존성**
-   ```go
-   // ✅ 표준 라이브러리만 사용
-   import "time"
-   import "strings"
-   ```
-
-### DON'T ❌
-
-1. **비즈니스 로직 포함 금지**
-   ```go
-   // ❌ 나쁜 예 - 비즈니스 로직
-   func CalculateUserDiscount(user User) float64
-   ```
-
-2. **프로젝트 특화 코드 금지**
-   ```go
-   // ❌ 나쁜 예 - 특정 프로젝트에만 유효
-   func GetUserFromGinContext(c *gin.Context) *User
-   ```
-
-3. **많은 의존성 금지**
-   ```go
-   // ❌ 나쁜 예 - 의존성 과다
-   import "gin_starter/internal/domain/user"
-   import "gin_starter/pkg/db/database"
-   ```
-
----
-
-## ✅ 체크리스트
-
-새 pkg 패키지 추가 시:
-
-- [ ] 다른 프로젝트에서도 사용 가능한가?
-- [ ] 비즈니스 로직과 무관한가?
-- [ ] 외부 의존성이 최소화되어 있는가?
-- [ ] Interface를 정의했는가?
-- [ ] 테스트 코드를 작성했는가?
-- [ ] README를 작성했는가?
-- [ ] 예제 코드를 포함했는가?

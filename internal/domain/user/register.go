@@ -29,21 +29,6 @@ type CreateUserRequest struct {
 // @Success 201 {object} response.Response
 // @Router /api/user/register [post]
 func (h *Handler) Register(c *gin.Context) {
-	req, ok := readRegisterRequest(c)
-	if !ok {
-		return
-	}
-
-	user, err := h.service.Register(req)
-	if err != nil {
-		response.FromError(c, err)
-		return
-	}
-
-	response.Created(c, gin.H{"user": user})
-}
-
-func readRegisterRequest(c *gin.Context) (*CreateUserRequest, bool) {
 	result := validator.Validate(c, []validator.Rule{
 		{Field: "user_id", Label: "아이디", Required: true, MinLen: 3, MaxLen: 20, Pattern: validator.PatternAlphaNum},
 		{Field: "user_pass", Label: "비밀번호", Required: true, MinLen: 6, MaxLen: 50},
@@ -52,30 +37,31 @@ func readRegisterRequest(c *gin.Context) (*CreateUserRequest, bool) {
 	})
 	if !result.Valid {
 		response.ValidationError(c, result.GetErrorMap())
-		return nil, false
+		return
 	}
 
-	return &CreateUserRequest{
+	req := &CreateUserRequest{
 		ID:       result.Values["user_id"],
 		Password: result.Values["user_pass"],
 		Name:     result.Values["user_name"],
 		Email:    result.Values["user_email"],
-	}, true
-}
+	}
 
-func (s *service) Register(req *CreateUserRequest) (*User, error) {
-	exists, err := s.repo.Exists(req.ID)
+	exists, err := h.deps.repo.Exists(req.ID)
 	if err != nil {
-		return nil, err
+		response.FromError(c, err)
+		return
 	}
 	if exists {
-		return nil, errors.ErrUserExists
+		response.FromError(c, errors.ErrUserExists)
+		return
 	}
 
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
 		logger.Error("failed to hash password: %v", err)
-		return nil, errors.Wrap(err, "PASSWORD_HASH_FAILED", "failed to process password")
+		response.FromError(c, errors.Wrap(err, "PASSWORD_HASH_FAILED", "failed to process password"))
+		return
 	}
 
 	user := &User{
@@ -89,10 +75,11 @@ func (s *service) Register(req *CreateUserRequest) (*User, error) {
 		CreatedAt: time.Now(),
 	}
 
-	if err := s.repo.Create(user); err != nil {
-		return nil, err
+	if err := h.deps.repo.Create(user); err != nil {
+		response.FromError(c, err)
+		return
 	}
 
 	logger.Info("user registered: %s", user.ID)
-	return user.ToPublic(), nil
+	response.Created(c, gin.H{"user": user.ToPublic()})
 }

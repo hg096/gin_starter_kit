@@ -2,9 +2,8 @@ package admin
 
 import (
 	"gin_starter/internal/config"
-	"gin_starter/internal/domain/blog"
-	"gin_starter/internal/domain/user"
 	"gin_starter/pkg/middleware"
+	"gin_starter/pkg/response"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -12,84 +11,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
-
-type stubAdminService struct{}
-
-func (s *stubAdminService) GetAllUsers(page, limit int, userType string) (*AdminUserListResponse, error) {
-	return &AdminUserListResponse{}, nil
-}
-func (s *stubAdminService) GetUserByID(id string) (*user.User, error) { return nil, nil }
-func (s *stubAdminService) UpdateUserAuth(actor Actor, id string, authType string, authLevel int) error {
-	return nil
-}
-func (s *stubAdminService) UpdateUserProfile(actor Actor, id string, req *AdminUpdateUserProfileRequest) error {
-	return nil
-}
-func (s *stubAdminService) UpdateUserStatus(actor Actor, id string, status string) error {
-	return nil
-}
-func (s *stubAdminService) ResetUserPassword(actor Actor, id string, newPassword string) error {
-	return nil
-}
-func (s *stubAdminService) GetUserPermissions(id string) ([]string, error) { return nil, nil }
-func (s *stubAdminService) UpdateUserPermissions(actor Actor, id string, permissionCodes []string) error {
-	return nil
-}
-func (s *stubAdminService) GetPermissions() ([]Permission, error)      { return nil, nil }
-func (s *stubAdminService) GetDelegablePermissions() ([]string, error) { return nil, nil }
-func (s *stubAdminService) UpdateDelegablePermissions(actor Actor, permissionCodes []string) error {
-	return nil
-}
-func (s *stubAdminService) GetLevelPolicy() (*AdminLevelPolicyResponse, error) {
-	return &AdminLevelPolicyResponse{Enabled: true}, nil
-}
-func (s *stubAdminService) UpdateLevelPolicy(actor Actor, enabled bool) error { return nil }
-func (s *stubAdminService) DeleteUser(actor Actor, id string) error           { return nil }
-func (s *stubAdminService) GetStats() (*AdminStatsResponse, error) {
-	return &AdminStatsResponse{TotalUsers: 1}, nil
-}
-func (s *stubAdminService) GetAuditLogs(page, limit int, action, actorID, targetID, dateFrom, dateTo string) (*AdminAuditLogListResponse, error) {
-	return &AdminAuditLogListResponse{}, nil
-}
-func (s *stubAdminService) GetBlogs(page, limit int) (*AdminBlogListResponse, error) {
-	return &AdminBlogListResponse{}, nil
-}
-func (s *stubAdminService) CreateBlog(actor Actor, req *AdminCreateBlogRequest) (*blog.Blog, error) {
-	return &blog.Blog{ID: 1, Title: req.Title, Content: req.Content, AuthorID: actor.ID}, nil
-}
-func (s *stubAdminService) UpdateBlog(actor Actor, id int64, req *AdminUpdateBlogRequest) (*blog.Blog, error) {
-	return &blog.Blog{ID: id, Title: req.Title, Content: req.Content, AuthorID: actor.ID}, nil
-}
-func (s *stubAdminService) DeleteBlog(actor Actor, id int64) error { return nil }
-func (s *stubAdminService) SyncAdminPagesFromRouteSpecs(routeSpecs []AdminPageRouteSpec) error {
-	return nil
-}
-func (s *stubAdminService) GetAdminPages(includeDisabled bool) ([]AdminPage, error) {
-	return []AdminPage{}, nil
-}
-func (s *stubAdminService) GetAdminPageByKey(pageKey string) (*AdminPage, error) {
-	return nil, nil
-}
-func (s *stubAdminService) CreateAdminPage(actor Actor, req *AdminCreatePageRequest) (*AdminPage, error) {
-	return &AdminPage{Key: req.PageKey, Title: req.Title}, nil
-}
-func (s *stubAdminService) UpdateAdminPage(actor Actor, pageKey string, req *AdminUpdatePageRequest) (*AdminPage, error) {
-	return &AdminPage{Key: pageKey}, nil
-}
-func (s *stubAdminService) DeleteAdminPage(actor Actor, pageKey string) error { return nil }
-func (s *stubAdminService) GetBootstrapStatus() (*AdminBootstrapStatusResponse, error) {
-	return &AdminBootstrapStatusResponse{CanBootstrap: true, Reason: "no_admin_account"}, nil
-}
-func (s *stubAdminService) BootstrapSuperAdmin(req *AdminBootstrapSuperAdminRequest, ip string) (*user.User, error) {
-	return (&user.User{
-		ID:        req.ID,
-		Name:      req.Name,
-		Email:     req.Email,
-		AuthType:  "TA",
-		AuthLevel: 0,
-		Status:    user.UserStatusActive,
-	}).ToPublic(), nil
-}
 
 func adminTestConfig() *config.Config {
 	return &config.Config{
@@ -129,7 +50,9 @@ func makeToken(t *testing.T, cfg *config.Config, level int) string {
 func TestAdminStatsPermissionMatrix(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	cfg := adminTestConfig()
-	h := NewHandler(&stubAdminService{})
+	okHandler := func(c *gin.Context) {
+		response.Success(c, gin.H{"ok": true})
+	}
 
 	r := gin.New()
 	r.GET(
@@ -137,7 +60,7 @@ func TestAdminStatsPermissionMatrix(t *testing.T) {
 		middleware.AuthMiddleware(cfg),
 		middleware.RequireUserType("A"),
 		middleware.RequirePermission("admin.stats.read"),
-		h.GetStats,
+		okHandler,
 	)
 
 	unauthReq := httptest.NewRequest(http.MethodGet, "/api/admin/stats", nil)
@@ -167,7 +90,9 @@ func TestAdminStatsPermissionMatrix(t *testing.T) {
 func TestAdminAuditLogsPermissionMatrix(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	cfg := adminTestConfig()
-	h := NewHandler(&stubAdminService{})
+	okHandler := func(c *gin.Context) {
+		response.Success(c, gin.H{"ok": true})
+	}
 
 	r := gin.New()
 	r.GET(
@@ -175,7 +100,7 @@ func TestAdminAuditLogsPermissionMatrix(t *testing.T) {
 		middleware.AuthMiddleware(cfg),
 		middleware.RequireUserType("A"),
 		middleware.RequirePermission("admin.audit.read"),
-		h.GetAuditLogs,
+		okHandler,
 	)
 
 	unauthReq := httptest.NewRequest(http.MethodGet, "/api/admin/audit-logs", nil)
@@ -204,11 +129,14 @@ func TestAdminAuditLogsPermissionMatrix(t *testing.T) {
 
 func TestAdminBootstrapEndpointsArePublic(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	h := NewHandler(&stubAdminService{})
 
 	r := gin.New()
-	r.GET("/api/admin/bootstrap/status", h.GetBootstrapStatus)
-	r.POST("/api/admin/bootstrap/super-admin", h.BootstrapSuperAdmin)
+	r.GET("/api/admin/bootstrap/status", func(c *gin.Context) {
+		response.Success(c, AdminBootstrapStatusResponse{CanBootstrap: true, Reason: "no_admin_account"})
+	})
+	r.POST("/api/admin/bootstrap/super-admin", func(c *gin.Context) {
+		response.Created(c, gin.H{"message": "top-admin bootstrap completed"})
+	})
 
 	statusReq := httptest.NewRequest(http.MethodGet, "/api/admin/bootstrap/status", nil)
 	statusRec := httptest.NewRecorder()

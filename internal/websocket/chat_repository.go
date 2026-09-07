@@ -504,10 +504,10 @@ func (r *chatRepository) CreateMessage(roomKey, senderID, content string, parent
 
 	var createdMessageID int64
 	if err := r.runTxWithRetry(func(tx *sql.Tx) error {
+		txRepo := r.base.Tx(tx)
 		if parentID != nil {
 			var existsCount int
-			if scanErr := r.base.QueryRowTx(
-				tx,
+			if scanErr := txRepo.QueryRow(
 				"SELECT COUNT(*) FROM _chat_room_messages WHERE crm_idx = ? AND crm_room_key = ?",
 				*parentID,
 				roomKey,
@@ -528,13 +528,13 @@ func (r *chatRepository) CreateMessage(roomKey, senderID, content string, parent
 			insertData["crm_parent_idx"] = *parentID
 		}
 
-		messageID, err := r.base.Tx(tx).Insert("_chat_room_messages", insertData)
+		messageID, err := txRepo.Insert("_chat_room_messages", insertData)
 		if err != nil {
 			return appErrors.Wrap(err, "DATABASE_ERROR", "failed to create chat message")
 		}
 		createdMessageID = messageID
 
-		affected, err := r.base.Tx(tx).Update("_chat_rooms", map[string]interface{}{
+		affected, err := txRepo.Update("_chat_rooms", map[string]interface{}{
 			"cr_updated_at": time.Now().Round(0),
 		}, "cr_key = ?", roomKey)
 		if err != nil {
@@ -747,10 +747,10 @@ func (r *chatRepository) ensureAdminUsersExistTx(tx *sql.Tx, userIDs []string) e
 	}
 
 	sort.Strings(normalized)
+	txRepo := r.base.Tx(tx)
 	for _, userID := range normalized {
 		var existsCount int
-		err := r.base.QueryRowTx(
-			tx,
+		err := txRepo.QueryRow(
 			"SELECT COUNT(*) FROM _user WHERE u_id = ? AND u_auth_type IN ('TA', 'A', 'M', 'G', 'AG')",
 			userID,
 		).Scan(&existsCount)

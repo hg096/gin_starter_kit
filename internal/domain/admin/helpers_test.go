@@ -145,14 +145,14 @@ func (s *auditRepoStub) DeleteUserPermissionsTx(tx *sql.Tx, userID string) error
 
 func TestGetAuditLogs_ValidatesDateRange(t *testing.T) {
 	repo := &auditRepoStub{}
-	svc := &service{permissionRepo: repo}
+	deps := &deps{permissionRepo: repo}
 
-	_, err := svc.GetAuditLogs(1, 20, "", "", "", "2026-13-01", "")
+	_, err := deps.GetAuditLogs(1, 20, "", "", "", "2026-13-01", "")
 	if !appErrors.Is(err, appErrors.ErrBadRequest) {
 		t.Fatalf("expected BAD_REQUEST for invalid date_from, got %v", err)
 	}
 
-	_, err = svc.GetAuditLogs(1, 20, "", "", "", "2026-02-21", "2026-02-20")
+	_, err = deps.GetAuditLogs(1, 20, "", "", "", "2026-02-21", "2026-02-20")
 	if !appErrors.Is(err, appErrors.ErrBadRequest) {
 		t.Fatalf("expected BAD_REQUEST for reversed date range, got %v", err)
 	}
@@ -160,9 +160,9 @@ func TestGetAuditLogs_ValidatesDateRange(t *testing.T) {
 
 func TestGetAuditLogs_NormalizesDateToExclusiveUpperBound(t *testing.T) {
 	repo := &auditRepoStub{}
-	svc := &service{permissionRepo: repo}
+	deps := &deps{permissionRepo: repo}
 
-	_, err := svc.GetAuditLogs(2, 10, " admin.account.permission.manage ", " actor1 ", " target1 ", "2026-02-01", "2026-02-07")
+	_, err := deps.GetAuditLogs(2, 10, " admin.account.permission.manage ", " actor1 ", " target1 ", "2026-02-01", "2026-02-07")
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -261,9 +261,9 @@ func TestNormalizeAdminPageRouteSpecs(t *testing.T) {
 }
 
 func TestKnownPermissionDescriptionsForCodes_RecognizesCoreAndBuiltinPage(t *testing.T) {
-	svc := &service{}
+	deps := &deps{}
 
-	got := svc.knownPermissionDescriptionsForCodes([]string{
+	got := deps.knownPermissionDescriptionsForCodes([]string{
 		"admin.audit.read",
 		"admin.page.admin_chat.read",
 		"unknown.permission.code",

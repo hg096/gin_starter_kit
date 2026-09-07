@@ -33,35 +33,25 @@ type AuthSnapshot struct {
 	TokenValidAfter *time.Time
 }
 
-// Service is the user domain service interface.
-type Service interface {
-	Register(req *CreateUserRequest) (*User, error)
-	Login(req *LoginRequest) (*LoginResponse, error)
-	GetProfile(userID string) (*User, error)
-	UpdateProfile(userID string, req *UpdateUserRequest) error
-	RefreshToken(req *RefreshTokenRequest) (*RefreshTokenResponse, error)
-	Logout(userID string) error
-}
-
-type service struct {
+type deps struct {
 	repo   Repository
 	config *config.Config
 }
 
-func NewService(repo Repository, cfg *config.Config) Service {
-	return &service{repo: repo, config: cfg}
+func NewDeps(repo Repository, cfg *config.Config) *deps {
+	return &deps{repo: repo, config: cfg}
 }
 
 // Handler handles user HTTP endpoints.
 type Handler struct {
-	service Service
-	cfg     *config.Config
+	deps *deps
+	cfg  *config.Config
 }
 
-func NewHandler(service Service, cfg *config.Config) *Handler {
+func NewHandler(deps *deps, cfg *config.Config) *Handler {
 	return &Handler{
-		service: service,
-		cfg:     cfg,
+		deps: deps,
+		cfg:  cfg,
 	}
 }
 

@@ -51,7 +51,7 @@ func ValidateDelegation(permissionCodes []string, delegable map[string]struct{})
 // @Security     BearerAuth
 // @Router       /api/admin/permissions [get]
 func (h *Handler) GetPermissions(c *gin.Context) {
-	permissions, err := h.service.GetPermissions()
+	permissions, err := h.deps.permissionRepo.ListPermissions()
 	if err != nil {
 		response.FromError(c, err)
 		return
@@ -68,7 +68,7 @@ func (h *Handler) GetPermissions(c *gin.Context) {
 // @Security     BearerAuth
 // @Router       /api/admin/permissions/delegable [get]
 func (h *Handler) GetDelegablePermissions(c *gin.Context) {
-	permissions, err := h.service.GetDelegablePermissions()
+	permissions, err := h.deps.permissionRepo.ListDelegablePermissions()
 	if err != nil {
 		response.FromError(c, err)
 		return
@@ -99,7 +99,7 @@ func (h *Handler) UpdateDelegablePermissions(c *gin.Context) {
 		return
 	}
 
-	if err := h.service.UpdateDelegablePermissions(actor, req.Permissions); err != nil {
+	if err := h.deps.UpdateDelegablePermissions(actor, req.Permissions); err != nil {
 		response.FromError(c, err)
 		return
 	}
@@ -115,13 +115,14 @@ func (h *Handler) UpdateDelegablePermissions(c *gin.Context) {
 // @Security     BearerAuth
 // @Router       /api/admin/level-policy [get]
 func (h *Handler) GetLevelPolicy(c *gin.Context) {
-	result, err := h.service.GetLevelPolicy()
+	enabled, err := h.deps.permissionRepo.GetLevelPolicyEnabled()
 	if err != nil {
+		logger.Error("failed to get level policy: %v", err)
 		response.FromError(c, err)
 		return
 	}
 
-	response.Success(c, result)
+	response.Success(c, &AdminLevelPolicyResponse{Enabled: enabled})
 }
 
 // UpdateLevelPolicy updates global auth-level policy.
@@ -150,7 +151,7 @@ func (h *Handler) UpdateLevelPolicy(c *gin.Context) {
 		return
 	}
 
-	if err := h.service.UpdateLevelPolicy(actor, *req.Enabled); err != nil {
+	if err := h.deps.UpdateLevelPolicy(actor, *req.Enabled); err != nil {
 		response.FromError(c, err)
 		return
 	}
@@ -158,46 +159,38 @@ func (h *Handler) UpdateLevelPolicy(c *gin.Context) {
 	response.Success(c, gin.H{"message": "level policy updated"})
 }
 
-func (s *service) GetPermissions() ([]Permission, error) {
-	return s.permissionRepo.ListPermissions()
-}
-
-func (s *service) GetDelegablePermissions() ([]string, error) {
-	return s.permissionRepo.ListDelegablePermissions()
-}
-
-func (s *service) UpdateDelegablePermissions(actor Actor, permissionCodes []string) error {
+func (d *deps) UpdateDelegablePermissions(actor Actor, permissionCodes []string) error {
 	if !actor.IsSuperAdmin {
-		return s.denyWithAudit(actor, "", "admin.allowlist.manage", "only top-admin can manage delegable permissions")
+		return d.denyWithAudit(actor, "", "admin.allowlist.manage", "only top-admin can manage delegable permissions")
 	}
 
 	codes := normalizePermissionCodes(permissionCodes)
-	if err := s.ensureKnownPermissionCodes(codes); err != nil {
+	if err := d.ensureKnownPermissionCodes(codes); err != nil {
 		return err
 	}
-	exists, err := s.permissionRepo.PermissionCodesExist(codes)
+	exists, err := d.permissionRepo.PermissionCodesExist(codes)
 	if err != nil {
 		return err
 	}
 	if !exists {
-		unknown, unknownErr := s.findUnknownPermissionCodes(codes)
+		unknown, unknownErr := d.findUnknownPermissionCodes(codes)
 		if unknownErr == nil && len(unknown) > 0 {
 			return errors.New("BAD_REQUEST", "unknown permission code in request: "+strings.Join(unknown, ", "))
 		}
 		return errors.New("BAD_REQUEST", "unknown permission code in request")
 	}
 
-	beforeCodes, err := s.permissionRepo.ListDelegablePermissions()
+	beforeCodes, err := d.permissionRepo.ListDelegablePermissions()
 	if err != nil {
 		return err
 	}
 
-	return s.db.WithTx(func(tx *sql.Tx) error {
-		if err := s.permissionRepo.ReplaceDelegablePermissionsTx(tx, codes); err != nil {
+	return d.db.WithTx(func(tx *sql.Tx) error {
+		if err := d.permissionRepo.ReplaceDelegablePermissionsTx(tx, codes); err != nil {
 			return err
 		}
 
-		return s.permissionRepo.WriteAuditLogTx(tx, &AuditLogEntry{
+		return d.permissionRepo.WriteAuditLogTx(tx, &AuditLogEntry{
 			ActorID: actor.ID,
 			Action:  "admin.allowlist.manage",
 			Status:  "success",
@@ -212,33 +205,24 @@ func (s *service) UpdateDelegablePermissions(actor Actor, permissionCodes []stri
 	})
 }
 
-func (s *service) GetLevelPolicy() (*AdminLevelPolicyResponse, error) {
-	enabled, err := s.permissionRepo.GetLevelPolicyEnabled()
-	if err != nil {
-		logger.Error("failed to get level policy: %v", err)
-		return nil, err
-	}
-	return &AdminLevelPolicyResponse{Enabled: enabled}, nil
-}
-
-func (s *service) UpdateLevelPolicy(actor Actor, enabled bool) error {
+func (d *deps) UpdateLevelPolicy(actor Actor, enabled bool) error {
 	if !actor.IsSuperAdmin {
-		return s.denyWithAudit(actor, "", "admin.system.level_policy.manage", "only top-admin can change level policy")
+		return d.denyWithAudit(actor, "", "admin.system.level_policy.manage", "only top-admin can change level policy")
 	}
 
-	beforeEnabled, err := s.permissionRepo.GetLevelPolicyEnabled()
+	beforeEnabled, err := d.permissionRepo.GetLevelPolicyEnabled()
 	if err != nil {
 		logger.Error("failed to get current level policy before update (actor=%s): %v", actor.ID, err)
 		return err
 	}
 
-	if err := s.db.WithTx(func(tx *sql.Tx) error {
-		if err := s.permissionRepo.SetLevelPolicyEnabledTx(tx, enabled, actor.ID); err != nil {
+	if err := d.db.WithTx(func(tx *sql.Tx) error {
+		if err := d.permissionRepo.SetLevelPolicyEnabledTx(tx, enabled, actor.ID); err != nil {
 			logger.Error("failed to persist level policy update (actor=%s enabled=%t): %v", actor.ID, enabled, err)
 			return err
 		}
 
-		if err := s.permissionRepo.WriteAuditLogTx(tx, &AuditLogEntry{
+		if err := d.permissionRepo.WriteAuditLogTx(tx, &AuditLogEntry{
 			ActorID: actor.ID,
 			Action:  "admin.system.level_policy.manage",
 			Status:  "success",
@@ -262,7 +246,7 @@ func (s *service) UpdateLevelPolicy(actor Actor, enabled bool) error {
 	return nil
 }
 
-func (s *service) knownPermissionDescriptionsForCodes(codes []string) map[string]string {
+func (d *deps) knownPermissionDescriptionsForCodes(codes []string) map[string]string {
 	if len(codes) == 0 {
 		return nil
 	}
@@ -282,8 +266,8 @@ func (s *service) knownPermissionDescriptionsForCodes(codes []string) map[string
 		}
 
 		page := builtInAdminPageByKey(pageKey)
-		if page == nil && s.pageRepo != nil {
-			pageFromDB, err := s.pageRepo.GetAdminPageByKey(pageKey)
+		if page == nil && d.pageRepo != nil {
+			pageFromDB, err := d.pageRepo.GetAdminPageByKey(pageKey)
 			if err != nil {
 				logger.Warn("skip page permission self-heal lookup (code=%s): %v", code, err)
 			} else if pageFromDB != nil {
@@ -300,12 +284,12 @@ func (s *service) knownPermissionDescriptionsForCodes(codes []string) map[string
 	return catalog
 }
 
-func (s *service) ensureKnownPermissionCodes(codes []string) error {
+func (d *deps) ensureKnownPermissionCodes(codes []string) error {
 	if len(codes) == 0 {
 		return nil
 	}
 
-	known := s.knownPermissionDescriptionsForCodes(codes)
+	known := d.knownPermissionDescriptionsForCodes(codes)
 	if len(known) == 0 {
 		return nil
 	}
@@ -313,30 +297,30 @@ func (s *service) ensureKnownPermissionCodes(codes []string) error {
 	type permissionCodeEnsurer interface {
 		EnsurePermissionCodes(codes map[string]string) error
 	}
-	ensurer, ok := s.permissionRepo.(permissionCodeEnsurer)
+	ensurer, ok := d.permissionRepo.(permissionCodeEnsurer)
 	if !ok {
 		return nil
 	}
 	return ensurer.EnsurePermissionCodes(known)
 }
 
-func (s *service) ensureCorePermissionCatalogTx(tx *sql.Tx) error {
+func (d *deps) ensureCorePermissionCatalogTx(tx *sql.Tx) error {
 	type permissionCodeTxEnsurer interface {
 		EnsurePermissionCodesTx(tx *sql.Tx, codes map[string]string) error
 	}
-	ensurer, ok := s.permissionRepo.(permissionCodeTxEnsurer)
+	ensurer, ok := d.permissionRepo.(permissionCodeTxEnsurer)
 	if !ok {
 		return nil
 	}
 	return ensurer.EnsurePermissionCodesTx(tx, corePermissionDescriptions())
 }
 
-func (s *service) findUnknownPermissionCodes(codes []string) ([]string, error) {
+func (d *deps) findUnknownPermissionCodes(codes []string) ([]string, error) {
 	if len(codes) == 0 {
 		return nil, nil
 	}
 
-	permissions, err := s.permissionRepo.ListPermissions()
+	permissions, err := d.permissionRepo.ListPermissions()
 	if err != nil {
 		return nil, err
 	}

@@ -3,6 +3,7 @@
 Go `internal/` 패키지입니다. 애플리케이션 내부 코드만 두며, 외부 모듈에서는 import할 수 없습니다.
 
 이 문서는 일부러 짧게 유지합니다. 사람과 AI가 적은 토큰으로 구조와 규칙을 빠르게 이해하는 것이 목적입니다.
+사용자가 따로 다른 방향을 요청하지 않으면 AI는 이 문서를 기본 규칙으로 따른다.
 
 ## 구조
 
@@ -11,19 +12,22 @@ internal/
   api/routes/     HTTP 라우트 연결만 담당
   config/         환경변수/설정 로딩
   domain/         비즈니스 기능
-  middleware/     HTTP 미들웨어
   websocket/      웹소켓/채팅 런타임
 ```
+
+HTTP 미들웨어는 `pkg/middleware`에 있습니다.
 
 ## 설계 기준
 
 각 도메인은 기능 중심 파일 구조를 우선합니다.
+신규/수정 코드는 기본적으로 하나의 기능 파일에서 handler, 내부 업무 흐름, DB 호출 흐름이 한 번에 읽히게 작성합니다.
+단순 래핑용 service/interface는 만들지 않습니다.
 
 ```text
 internal/domain/{feature}/
-  {feature}.go       엔티티, 인터페이스, 생성자, 공통 도메인 타입
-  repository.go      DB 접근 전용
+  {feature}.go       엔티티, 생성자, 공통 도메인 타입
   {action}.go        하나의 업무 흐름: 요청 -> 검증 -> 처리 -> 응답
+  repository.go      여러 기능이 공유하거나 데이터 일관성상 분리가 필요한 SQL만 선택적으로 둠
   *_test.go          변경된 동작 주변의 집중 테스트
 ```
 
@@ -39,24 +43,35 @@ user/
   repository.go
 
 admin/
-  admin.go
+  handler.go
   users.go
   permissions.go
   pages.go
   blogs.go
   audit.go
   bootstrap.go
+  page_views.go
   permission_repository.go
+
+websocket/
+  handler.go
+  chat_repository.go
+  chat_helpers.go
+  hub.go
+  client.go
 ```
 
-기본 구조를 `handler.go / service.go / model.go` 분리로 되돌리지 않습니다. 아주 작은 패키지에서 그 방식이 더 명확할 때만 예외로 사용합니다.
+기계적인 `handler.go / service.go / model.go` 3분할로 되돌리지 않습니다.
+service/repository 파일은 코드가 겹치거나, 여러 기능이 같은 순서를 반드시 거쳐야 데이터 문제가 생기지 않는 경우에만 둡니다.
+현재 일부 기존 코드는 service/repository 분리가 남아 있을 수 있지만, 새 코드는 단순한 handler 중심 흐름을 우선합니다.
+이미 handler 중심으로 정리된 영역은 service/interface 구조로 되돌리지 않습니다.
 
 ## 흐름
 
 사용자에게 노출되는 기능은 위에서 아래로 한 번에 읽히게 유지합니다.
 
 ```text
-route -> handler -> 입력 파싱 -> 검증 -> service 흐름 -> repository -> response
+route -> handler -> 입력 파싱 -> 검증 -> 내부 업무 로직 -> DB helper/SQL -> response
 ```
 
 기능 파일 안의 권장 순서:
@@ -65,8 +80,8 @@ route -> handler -> 입력 파싱 -> 검증 -> service 흐름 -> repository -> r
 DTO
 handler 메서드
 작은 handler helper
-service 메서드
-작은 service helper
+업무 흐름 helper
+DB helper
 ```
 
 목표는 한 파일을 열었을 때 여러 파일을 오가지 않고 하나의 흐름을 이해하는 것입니다.
@@ -74,16 +89,19 @@ service 메서드
 ## 의존성 규칙
 
 ```text
-routes/middleware/websocket -> domain -> repository -> pkg/db
+routes + pkg/middleware + websocket -> domain -> pkg/db
 ```
 
 - `routes`는 handler 연결만 담당합니다. 비즈니스 로직을 넣지 않습니다.
-- `handler`는 HTTP 입력 파싱과 HTTP 응답 반환만 담당합니다.
-- `service`는 검증, 권한 판단, 트랜잭션, 업무 흐름을 담당합니다.
-- `repository`는 SQL과 row mapping만 담당합니다.
+- `handler`는 HTTP 입력 파싱, 검증 호출, 업무 흐름, 응답 반환을 한눈에 보이게 둡니다.
+- handler 의존성 묶음은 `deps`로 이름 짓습니다. `service`라는 이름으로 단순 래핑 계층을 만들지 않습니다.
+- `service`는 기본으로 만들지 않습니다. 단순히 handler에서 repository를 호출하는 래핑용 service/interface는 제거합니다.
+- 여러 handler가 같은 업무 순서를 반드시 공유해야 하거나, 감사 로그/권한/트랜잭션 순서를 강제해야 할 때만 service helper를 둡니다.
+- `repository`는 기본으로 만들지 않습니다. 여러 기능이 공유하는 SQL, row mapping, 데이터 일관성상 분리가 필요한 DB 작업만 둡니다.
 - `domain`은 `pkg/*` 공통 helper를 사용할 수 있습니다.
 - 이미 필요한 구조가 아니라면 domain 간 직접 의존은 피합니다.
 - middleware에는 비즈니스 로직을 넣지 않습니다.
+- websocket handler도 같은 기준을 따른다. 얇은 ChatService 래핑을 만들지 않고 `Handler -> ChatRepository/helper` 흐름을 우선합니다.
 
 ## 공통 Helper
 
@@ -100,8 +118,9 @@ pkg/utils
   TruncateText(value, maxRunes)
 
 pkg/db/database
+  Store: 일반 DB와 트랜잭션 DB가 공유하는 Query/Insert/Update/Delete/Count/Exists 표면
   Repository: Query/Insert/Update/Delete helper
-  TxRepository: 트랜잭션 안에서도 Insert/Update/Delete 같은 이름 사용
+  TxRepository: 트랜잭션 안에서도 Query/Insert/Update/Delete 같은 이름 사용
   Exec: 검증된 커스텀 INSERT/UPDATE/DELETE 전용
   ExecSchema: CREATE/ALTER 같은 스키마 보정 전용
   ExecUnsafe: 검증 없는 예외 실행. 사용 전 재검토 필수
@@ -122,31 +141,35 @@ pkg/db/database
 
 ## 트랜잭션
 
-service 레벨 트랜잭션은 `db.WithTx`를 사용합니다.
+트랜잭션은 업무 흐름이 보이는 위치에서 `db.WithTx`를 사용합니다.
 
 ```go
-err := s.db.WithTx(func(tx *sql.Tx) error {
-	repo := s.repo.Tx(tx)
-	if err := repo.Update(id, updates); err != nil {
+err := h.db.WithTx(func(tx *sql.Tx) error {
+	q := database.NewRepository(h.db).Tx(tx)
+	if _, err := q.Update("_table", updates, "id = ?", id); err != nil {
 		return err
 	}
-	return s.auditRepo.WriteAuditLogTx(tx, entry)
+	_, err := q.Insert("_audit_logs", auditData)
+	return err
 })
 ```
 
-service에서 `BeginTx`, deferred rollback, commit을 반복 작성하지 않습니다.
+`BeginTx`, deferred rollback, commit을 반복 작성하지 않습니다.
 
-도메인 repository도 트랜잭션 안에서는 `Tx(tx)` view를 만든 뒤 같은 함수명을 사용합니다.
+도메인 repository가 필요한 경우에도 트랜잭션 안에서는 `Tx(tx)` view를 만든 뒤 같은 함수명을 사용합니다.
 
 ```go
-userRepo := s.userRepo.Tx(tx)
+userRepo := h.userRepo.Tx(tx)
 if err := userRepo.Update(id, updates); err != nil {
 	return err
 }
 ```
 
-새 도메인 코드는 `CreateTx`, `UpdateTx`, `DeleteTx` 같은 접미사 메서드를 만들지 않습니다.
+새 코드는 `CreateTx`, `UpdateTx`, `DeleteTx` 같은 접미사 메서드를 만들지 않습니다.
 트랜잭션 여부는 `Tx(tx)`에서만 드러내고, 실제 작업 이름은 `Create`, `Update`, `Delete`로 유지합니다.
+
+트랜잭션 재시도는 실제로 필요한 런타임 영역에서만 둡니다.
+예: `internal/websocket` 채팅 생성/메시지 저장은 일시적인 DB 연결 오류를 흡수하기 위해 repository helper에 재시도를 둘 수 있습니다.
 
 ## 문자열
 
@@ -180,9 +203,9 @@ information_schema 확인 -> 없을 때만 ALTER 실행 -> 동시성 중복 에�
 기본 CRUD는 명시적인 helper를 사용합니다.
 
 ```go
-r.base.Insert("_table", data)
-r.base.Update("_table", data, "id = ?", id)
-r.base.Delete("_table", "id = ?", id)
+repo.Insert("_table", data)
+repo.Update("_table", data, "id = ?", id)
+repo.Delete("_table", "id = ?", id)
 ```
 
 트랜잭션 안에서는 `Tx` view를 만들어 같은 함수명을 사용합니다.
@@ -269,5 +292,8 @@ go test ./...
 - 트랜잭션 boilerplate 중복
 - 존재 확인 없는 schema ALTER
 - repository/middleware 안에 숨은 비즈니스 규칙
+- 단순 CRUD마다 service/repository 파일을 기계적으로 추가
+- 단순 repository 호출만 감싸는 service/interface 추가
+- 이미 handler에서 읽히는 흐름을 다시 service로 숨기기
 - 작은 수정에 섞인 광범위한 리팩터링
 - 예상 가능한 duplicate/missing schema 체크를 런타임 에러 로그로 기록

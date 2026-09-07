@@ -140,7 +140,7 @@ func BuildPagePermissionCodes(pageKey string) []string {
 // @Router       /api/admin/pages [get]
 func (h *Handler) GetAdminPages(c *gin.Context) {
 	includeDisabled := utils.TrimLower(c.DefaultQuery("include_disabled", "false")) == "true"
-	pages, err := h.service.GetAdminPages(includeDisabled)
+	pages, err := h.deps.GetAdminPages(includeDisabled)
 	if err != nil {
 		response.FromError(c, err)
 		return
@@ -174,7 +174,7 @@ func (h *Handler) CreateAdminPage(c *gin.Context) {
 		return
 	}
 
-	page, err := h.service.CreateAdminPage(actor, &req)
+	page, err := h.deps.CreateAdminPage(actor, &req)
 	if err != nil {
 		response.FromError(c, err)
 		return
@@ -218,7 +218,7 @@ func (h *Handler) UpdateAdminPage(c *gin.Context) {
 		return
 	}
 
-	page, err := h.service.UpdateAdminPage(actor, pageKey, &req)
+	page, err := h.deps.UpdateAdminPage(actor, pageKey, &req)
 	if err != nil {
 		response.FromError(c, err)
 		return
@@ -253,7 +253,7 @@ func (h *Handler) DeleteAdminPage(c *gin.Context) {
 		return
 	}
 
-	if err := h.service.DeleteAdminPage(actor, pageKey); err != nil {
+	if err := h.deps.DeleteAdminPage(actor, pageKey); err != nil {
 		response.FromError(c, err)
 		return
 	}
@@ -261,12 +261,12 @@ func (h *Handler) DeleteAdminPage(c *gin.Context) {
 	response.Success(c, gin.H{"message": "admin page deleted"})
 }
 
-func (s *service) GetAdminPages(includeDisabled bool) ([]AdminPage, error) {
-	if s.pageRepo == nil {
+func (d *deps) GetAdminPages(includeDisabled bool) ([]AdminPage, error) {
+	if d.pageRepo == nil {
 		return defaultAdminPages(includeDisabled), nil
 	}
 
-	pages, err := s.pageRepo.ListAdminPages(includeDisabled)
+	pages, err := d.pageRepo.ListAdminPages(includeDisabled)
 	if err != nil {
 		if isMissingTableErrorForBootstrap(err) {
 			return defaultAdminPages(includeDisabled), nil
@@ -281,8 +281,8 @@ func (s *service) GetAdminPages(includeDisabled bool) ([]AdminPage, error) {
 }
 
 // SyncAdminPagesFromRouteSpecs creates or updates route-managed pages from route specs.
-func (s *service) SyncAdminPagesFromRouteSpecs(routeSpecs []AdminPageRouteSpec) error {
-	if s.pageRepo == nil || s.db == nil {
+func (d *deps) SyncAdminPagesFromRouteSpecs(routeSpecs []AdminPageRouteSpec) error {
+	if d.pageRepo == nil || d.db == nil {
 		return nil
 	}
 
@@ -291,13 +291,13 @@ func (s *service) SyncAdminPagesFromRouteSpecs(routeSpecs []AdminPageRouteSpec) 
 		return nil
 	}
 
-	existingPages, err := s.pageRepo.ListAdminPages(true)
+	existingPages, err := d.pageRepo.ListAdminPages(true)
 	if err != nil {
 		if isMissingTableErrorForBootstrap(err) {
-			if ensureErr := s.pageRepo.EnsureAdminPageSchema(); ensureErr != nil {
+			if ensureErr := d.pageRepo.EnsureAdminPageSchema(); ensureErr != nil {
 				return ensureErr
 			}
-			existingPages, err = s.pageRepo.ListAdminPages(true)
+			existingPages, err = d.pageRepo.ListAdminPages(true)
 			if err != nil && !isMissingTableErrorForBootstrap(err) {
 				return err
 			}
@@ -314,8 +314,8 @@ func (s *service) SyncAdminPagesFromRouteSpecs(routeSpecs []AdminPageRouteSpec) 
 		existingByKey[page.Key] = page
 	}
 
-	return s.db.WithTx(func(tx *sql.Tx) error {
-		if err := s.ensureCorePermissionCatalogTx(tx); err != nil {
+	return d.db.WithTx(func(tx *sql.Tx) error {
+		if err := d.ensureCorePermissionCatalogTx(tx); err != nil {
 			return err
 		}
 
@@ -340,13 +340,13 @@ func (s *service) SyncAdminPagesFromRouteSpecs(routeSpecs []AdminPageRouteSpec) 
 					Builtin:      true,
 					CreatedBy:    "system",
 				}
-				if err := s.pageRepo.CreateAdminPageTx(tx, page); err != nil {
+				if err := d.pageRepo.CreateAdminPageTx(tx, page); err != nil {
 					return err
 				}
-				if err := s.pageRepo.EnsurePagePermissionCodesTx(tx, page); err != nil {
+				if err := d.pageRepo.EnsurePagePermissionCodesTx(tx, page); err != nil {
 					return err
 				}
-				s.syncGrantPageReadPermissionTx(tx, spec.PageKey)
+				d.syncGrantPageReadPermissionTx(tx, spec.PageKey)
 				continue
 			}
 
@@ -397,14 +397,14 @@ func (s *service) SyncAdminPagesFromRouteSpecs(routeSpecs []AdminPageRouteSpec) 
 			}
 
 			if changed {
-				if err := s.pageRepo.UpdateAdminPageTx(tx, &existing); err != nil {
+				if err := d.pageRepo.UpdateAdminPageTx(tx, &existing); err != nil {
 					return err
 				}
 			}
-			if err := s.pageRepo.EnsurePagePermissionCodesTx(tx, &existing); err != nil {
+			if err := d.pageRepo.EnsurePagePermissionCodesTx(tx, &existing); err != nil {
 				return err
 			}
-			s.syncGrantPageReadPermissionTx(tx, spec.PageKey)
+			d.syncGrantPageReadPermissionTx(tx, spec.PageKey)
 		}
 
 		for _, page := range existingPages {
@@ -419,7 +419,7 @@ func (s *service) SyncAdminPagesFromRouteSpecs(routeSpecs []AdminPageRouteSpec) 
 			}
 
 			page.Enabled = false
-			if err := s.pageRepo.UpdateAdminPageTx(tx, &page); err != nil {
+			if err := d.pageRepo.UpdateAdminPageTx(tx, &page); err != nil {
 				return err
 			}
 		}
@@ -428,7 +428,7 @@ func (s *service) SyncAdminPagesFromRouteSpecs(routeSpecs []AdminPageRouteSpec) 
 	})
 }
 
-func (s *service) GetAdminPageByKey(pageKey string) (*AdminPage, error) {
+func (d *deps) GetAdminPageByKey(pageKey string) (*AdminPage, error) {
 	key, ok := NormalizePageKey(pageKey)
 	if !ok {
 		return nil, errors.New("BAD_REQUEST", "invalid page_key format")
@@ -438,11 +438,11 @@ func (s *service) GetAdminPageByKey(pageKey string) (*AdminPage, error) {
 		return builtIn, nil
 	}
 
-	if s.pageRepo == nil {
+	if d.pageRepo == nil {
 		return nil, nil
 	}
 
-	page, err := s.pageRepo.GetAdminPageByKey(key)
+	page, err := d.pageRepo.GetAdminPageByKey(key)
 	if err != nil {
 		if isMissingTableErrorForBootstrap(err) {
 			return nil, nil
@@ -452,11 +452,11 @@ func (s *service) GetAdminPageByKey(pageKey string) (*AdminPage, error) {
 	return page, nil
 }
 
-func (s *service) CreateAdminPage(actor Actor, req *AdminCreatePageRequest) (*AdminPage, error) {
+func (d *deps) CreateAdminPage(actor Actor, req *AdminCreatePageRequest) (*AdminPage, error) {
 	if req == nil {
 		return nil, errors.New("BAD_REQUEST", "request body is required")
 	}
-	if s.pageRepo == nil {
+	if d.pageRepo == nil {
 		return nil, errors.New("DATABASE_ERROR", "admin page repository is not available")
 	}
 
@@ -510,7 +510,7 @@ func (s *service) CreateAdminPage(actor Actor, req *AdminCreatePageRequest) (*Ad
 		enabled = *req.Enabled
 	}
 
-	existing, err := s.pageRepo.GetAdminPageByKey(key)
+	existing, err := d.pageRepo.GetAdminPageByKey(key)
 	if err != nil {
 		if !isMissingTableErrorForBootstrap(err) {
 			return nil, err
@@ -541,14 +541,14 @@ func (s *service) CreateAdminPage(actor Actor, req *AdminCreatePageRequest) (*Ad
 		},
 	}
 
-	if err := s.db.WithTx(func(tx *sql.Tx) error {
-		if err := s.pageRepo.CreateAdminPageTx(tx, page); err != nil {
+	if err := d.db.WithTx(func(tx *sql.Tx) error {
+		if err := d.pageRepo.CreateAdminPageTx(tx, page); err != nil {
 			return err
 		}
-		if err := s.pageRepo.EnsurePagePermissionCodesTx(tx, page); err != nil {
+		if err := d.pageRepo.EnsurePagePermissionCodesTx(tx, page); err != nil {
 			return err
 		}
-		return s.permissionRepo.WriteAuditLogTx(tx, &AuditLogEntry{
+		return d.permissionRepo.WriteAuditLogTx(tx, &AuditLogEntry{
 			ActorID: actor.ID,
 			Action:  PermissionPageManage,
 			Status:  "success",
@@ -567,7 +567,7 @@ func (s *service) CreateAdminPage(actor Actor, req *AdminCreatePageRequest) (*Ad
 		return nil, err
 	}
 
-	created, err := s.pageRepo.GetAdminPageByKey(key)
+	created, err := d.pageRepo.GetAdminPageByKey(key)
 	if err != nil {
 		return nil, err
 	}
@@ -577,11 +577,11 @@ func (s *service) CreateAdminPage(actor Actor, req *AdminCreatePageRequest) (*Ad
 	return created, nil
 }
 
-func (s *service) UpdateAdminPage(actor Actor, pageKey string, req *AdminUpdatePageRequest) (*AdminPage, error) {
+func (d *deps) UpdateAdminPage(actor Actor, pageKey string, req *AdminUpdatePageRequest) (*AdminPage, error) {
 	if req == nil {
 		return nil, errors.New("BAD_REQUEST", "request body is required")
 	}
-	if s.pageRepo == nil {
+	if d.pageRepo == nil {
 		return nil, errors.New("DATABASE_ERROR", "admin page repository is not available")
 	}
 
@@ -590,7 +590,7 @@ func (s *service) UpdateAdminPage(actor Actor, pageKey string, req *AdminUpdateP
 		return nil, errors.New("BAD_REQUEST", "invalid page_key format")
 	}
 
-	page, err := s.pageRepo.GetAdminPageByKey(key)
+	page, err := d.pageRepo.GetAdminPageByKey(key)
 	if err != nil {
 		if isMissingTableErrorForBootstrap(err) {
 			return nil, errors.New("NOT_FOUND", "admin page not found")
@@ -694,16 +694,16 @@ func (s *service) UpdateAdminPage(actor Actor, pageKey string, req *AdminUpdateP
 		return page, nil
 	}
 
-	if err := s.db.WithTx(func(tx *sql.Tx) error {
+	if err := d.db.WithTx(func(tx *sql.Tx) error {
 		if fromRepository {
-			if err := s.pageRepo.UpdateAdminPageTx(tx, page); err != nil {
+			if err := d.pageRepo.UpdateAdminPageTx(tx, page); err != nil {
 				return err
 			}
 		}
-		if err := s.pageRepo.EnsurePagePermissionCodesTx(tx, page); err != nil {
+		if err := d.pageRepo.EnsurePagePermissionCodesTx(tx, page); err != nil {
 			return err
 		}
-		return s.permissionRepo.WriteAuditLogTx(tx, &AuditLogEntry{
+		return d.permissionRepo.WriteAuditLogTx(tx, &AuditLogEntry{
 			ActorID: actor.ID,
 			Action:  PermissionPageManage,
 			Status:  "success",
@@ -730,7 +730,7 @@ func (s *service) UpdateAdminPage(actor Actor, pageKey string, req *AdminUpdateP
 	if !fromRepository {
 		return page, nil
 	}
-	updated, err := s.pageRepo.GetAdminPageByKey(key)
+	updated, err := d.pageRepo.GetAdminPageByKey(key)
 	if err != nil {
 		return nil, err
 	}
@@ -740,8 +740,8 @@ func (s *service) UpdateAdminPage(actor Actor, pageKey string, req *AdminUpdateP
 	return updated, nil
 }
 
-func (s *service) DeleteAdminPage(actor Actor, pageKey string) error {
-	if s.pageRepo == nil {
+func (d *deps) DeleteAdminPage(actor Actor, pageKey string) error {
+	if d.pageRepo == nil {
 		return errors.New("DATABASE_ERROR", "admin page repository is not available")
 	}
 
@@ -753,7 +753,7 @@ func (s *service) DeleteAdminPage(actor Actor, pageKey string) error {
 		return errors.New("FORBIDDEN", "built-in pages cannot be deleted")
 	}
 
-	page, err := s.pageRepo.GetAdminPageByKey(key)
+	page, err := d.pageRepo.GetAdminPageByKey(key)
 	if err != nil {
 		if isMissingTableErrorForBootstrap(err) {
 			return errors.New("NOT_FOUND", "admin page not found")
@@ -764,14 +764,14 @@ func (s *service) DeleteAdminPage(actor Actor, pageKey string) error {
 		return errors.New("NOT_FOUND", "admin page not found")
 	}
 
-	return s.db.WithTx(func(tx *sql.Tx) error {
-		if err := s.pageRepo.DeletePagePermissionCodesTx(tx, key); err != nil {
+	return d.db.WithTx(func(tx *sql.Tx) error {
+		if err := d.pageRepo.DeletePagePermissionCodesTx(tx, key); err != nil {
 			return err
 		}
-		if err := s.pageRepo.DeleteAdminPageTx(tx, key); err != nil {
+		if err := d.pageRepo.DeleteAdminPageTx(tx, key); err != nil {
 			return err
 		}
-		return s.permissionRepo.WriteAuditLogTx(tx, &AuditLogEntry{
+		return d.permissionRepo.WriteAuditLogTx(tx, &AuditLogEntry{
 			ActorID: actor.ID,
 			Action:  PermissionPageManage,
 			Status:  "success",
@@ -786,14 +786,14 @@ func (s *service) DeleteAdminPage(actor Actor, pageKey string) error {
 	})
 }
 
-func (s *service) syncGrantPageReadPermissionTx(tx *sql.Tx, pageKey string) {
+func (d *deps) syncGrantPageReadPermissionTx(tx *sql.Tx, pageKey string) {
 	sourceCode := defaultPageReadGrantSource(pageKey)
 	if sourceCode == "" {
 		return
 	}
 
 	targetCode := BuildPagePermissionCode(pageKey, PageActionRead)
-	if err := s.permissionRepo.GrantPermissionFromExistingTx(tx, targetCode, sourceCode); err != nil {
+	if err := d.permissionRepo.GrantPermissionFromExistingTx(tx, targetCode, sourceCode); err != nil {
 		// Permission auto-copy is best-effort; page registry sync should still succeed.
 		logger.Warn("skip read permission auto-copy for page %s: %v", pageKey, err)
 	}

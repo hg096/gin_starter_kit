@@ -14,35 +14,25 @@ type Blog struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
-// Service 블로그 비즈니스 로직 인터페이스
-type Service interface {
-	CreateBlog(authorID string, req *CreateBlogRequest) (*Blog, error)
-	GetBlog(id int64) (*Blog, error)
-	GetBlogs(page, limit int) (*BlogListResponse, error)
-	GetBlogsByAuthor(authorID string, page, limit int) (*BlogListResponse, error)
-	UpdateBlog(id int64, authorID string, req *UpdateBlogRequest) (*Blog, error)
-	DeleteBlog(id int64, authorID string) error
-}
-
-type service struct {
+type deps struct {
 	repo Repository
 }
 
-// NewService 블로그 서비스 생성
-func NewService(repo Repository) Service {
-	return &service{
+// NewDeps 블로그 handler dependency 생성
+func NewDeps(repo Repository) *deps {
+	return &deps{
 		repo: repo,
 	}
 }
 
 // Handler handles blog HTTP endpoints.
 type Handler struct {
-	service Service
+	deps *deps
 }
 
-func NewHandler(service Service) *Handler {
+func NewHandler(deps *deps) *Handler {
 	return &Handler{
-		service: service,
+		deps: deps,
 	}
 }
 

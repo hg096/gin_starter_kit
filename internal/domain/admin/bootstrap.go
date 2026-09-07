@@ -4,10 +4,10 @@ import (
 	"database/sql"
 	"gin_starter/internal/domain/user"
 	"gin_starter/pkg/authz"
+	"gin_starter/pkg/db/database"
 	"gin_starter/pkg/errors"
 	"gin_starter/pkg/logger"
 	"gin_starter/pkg/response"
-	"gin_starter/pkg/utils"
 	"net/mail"
 	"strings"
 	"time"
@@ -39,12 +39,19 @@ type AdminBootstrapSuperAdminRequest struct {
 // @Success      200 {object} response.Response{data=AdminBootstrapStatusResponse}
 // @Router       /api/admin/bootstrap/status [get]
 func (h *Handler) GetBootstrapStatus(c *gin.Context) {
-	status, err := h.service.GetBootstrapStatus()
+	state, err := h.deps.readBootstrapState(h.deps.db.DB)
 	if err != nil {
 		response.FromError(c, err)
 		return
 	}
-	response.Success(c, status)
+	canBootstrap, reason := evaluateBootstrapState(state)
+
+	response.Success(c, &AdminBootstrapStatusResponse{
+		CanBootstrap:    canBootstrap,
+		Reason:          reason,
+		AdminCount:      state.AdminCount,
+		SuperAdminCount: state.SuperAdminCount,
+	})
 }
 
 // BootstrapSuperAdmin creates a super-admin when bootstrap is allowed.
@@ -65,45 +72,15 @@ func (h *Handler) BootstrapSuperAdmin(c *gin.Context) {
 		return
 	}
 
-	createdUser, err := h.service.BootstrapSuperAdmin(&req, c.ClientIP())
-	if err != nil {
+	if err := normalizeBootstrapRequest(&req); err != nil {
 		response.FromError(c, err)
 		return
 	}
 
-	response.Created(c, gin.H{
-		"message": "top-admin bootstrap completed",
-		"user":    createdUser,
-	})
-}
-
-func (s *service) GetBootstrapStatus() (*AdminBootstrapStatusResponse, error) {
-	state, err := s.readBootstrapState(s.db.DB)
-	if err != nil {
-		return nil, err
-	}
-	canBootstrap, reason := evaluateBootstrapState(state)
-
-	return &AdminBootstrapStatusResponse{
-		CanBootstrap:    canBootstrap,
-		Reason:          reason,
-		AdminCount:      state.AdminCount,
-		SuperAdminCount: state.SuperAdminCount,
-	}, nil
-}
-
-func (s *service) BootstrapSuperAdmin(req *AdminBootstrapSuperAdminRequest, ip string) (*user.User, error) {
-	if req == nil {
-		return nil, errors.New("BAD_REQUEST", "request body is required")
-	}
-	if err := normalizeBootstrapRequest(req); err != nil {
-		return nil, err
-	}
-
 	var bootstrapUser *user.User
 	var reason string
-	if err := s.db.WithTx(func(tx *sql.Tx) error {
-		state, err := s.readBootstrapState(tx)
+	if err := h.deps.db.WithTx(func(tx *sql.Tx) error {
+		state, err := h.deps.readBootstrapState(tx)
 		if err != nil {
 			return err
 		}
@@ -137,22 +114,22 @@ func (s *service) BootstrapSuperAdmin(req *AdminBootstrapSuperAdminRequest, ip s
 			Status:    user.UserStatusActive,
 			CreatedAt: now,
 		}
-		userRepo := s.userRepo.Tx(tx)
+		userRepo := h.deps.userRepo.Tx(tx)
 		if err := userRepo.Create(bootstrapUser); err != nil {
 			return err
 		}
 
-		if err := s.assignAllPermissionsTx(tx, bootstrapUser.ID); err != nil {
+		if err := h.deps.assignAllPermissionsTx(tx, bootstrapUser.ID); err != nil {
 			return err
 		}
 
-		auditErr := s.permissionRepo.WriteAuditLogTx(tx, &AuditLogEntry{
+		auditErr := h.deps.permissionRepo.WriteAuditLogTx(tx, &AuditLogEntry{
 			ActorID:  bootstrapUser.ID,
 			TargetID: bootstrapUser.ID,
 			Action:   "system.bootstrap.super_admin.create",
 			Status:   "success",
 			Message:  reason,
-			IP:       strings.TrimSpace(ip),
+			IP:       strings.TrimSpace(c.ClientIP()),
 			AfterData: map[string]interface{}{
 				"user_id":    bootstrapUser.ID,
 				"auth_type":  authz.AuthTypeTopAdmin,
@@ -166,15 +143,19 @@ func (s *service) BootstrapSuperAdmin(req *AdminBootstrapSuperAdminRequest, ip s
 
 		return nil
 	}); err != nil {
-		return nil, err
+		response.FromError(c, err)
+		return
 	}
 
 	logger.Warn("top-admin bootstrapped: %s (%s)", bootstrapUser.ID, reason)
-	return bootstrapUser.ToPublic(), nil
+	response.Created(c, gin.H{
+		"message": "top-admin bootstrap completed",
+		"user":    bootstrapUser.ToPublic(),
+	})
 }
 
-func (s *service) assignAllPermissionsTx(tx *sql.Tx, userID string) error {
-	permissions, err := s.permissionRepo.ListPermissions()
+func (d *deps) assignAllPermissionsTx(tx *sql.Tx, userID string) error {
+	permissions, err := d.permissionRepo.ListPermissions()
 	if err != nil {
 		if isMissingTableErrorForBootstrap(err) {
 			return nil
@@ -187,7 +168,7 @@ func (s *service) assignAllPermissionsTx(tx *sql.Tx, userID string) error {
 		codes = append(codes, permission.Code)
 	}
 
-	if err := s.permissionRepo.ReplaceUserPermissionsTx(tx, userID, codes); err != nil {
+	if err := d.permissionRepo.ReplaceUserPermissionsTx(tx, userID, codes); err != nil {
 		if isMissingTableErrorForBootstrap(err) {
 			return nil
 		}
@@ -197,7 +178,7 @@ func (s *service) assignAllPermissionsTx(tx *sql.Tx, userID string) error {
 	return nil
 }
 
-func (s *service) readBootstrapState(queryer bootstrapQueryer) (*bootstrapState, error) {
+func (d *deps) readBootstrapState(queryer bootstrapQueryer) (*bootstrapState, error) {
 	state := &bootstrapState{}
 
 	if err := queryer.QueryRow("SELECT COUNT(*) FROM _user WHERE u_auth_type IN ('TA', 'A', 'M', 'G', 'AG')").Scan(&state.AdminCount); err != nil {
@@ -274,9 +255,5 @@ func isAlphaNumeric(value string) bool {
 }
 
 func isMissingTableErrorForBootstrap(err error) bool {
-	if err == nil {
-		return false
-	}
-	msg := utils.TrimLower(err.Error())
-	return strings.Contains(msg, "doesn't exist") || strings.Contains(msg, "no such table")
+	return database.IsMissingTableError(err)
 }

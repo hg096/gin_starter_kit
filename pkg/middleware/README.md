@@ -1,4 +1,4 @@
-# internal/middleware
+# pkg/middleware
 
 HTTP 요청이 handler에 도달하기 전/후에 실행되는 공통 관문입니다.
 
@@ -7,7 +7,7 @@ HTTP 요청이 handler에 도달하기 전/후에 실행되는 공통 관문입�
 ## 구조
 
 ```text
-middleware/
+pkg/middleware/
   auth.go           HTTP 인증 흐름
   token.go          JWT 생성/검증, AES-GCM 암복호화
   auth_snapshot.go  DB 기준 인증 snapshot 로딩/검증
@@ -95,7 +95,7 @@ middleware.AdminPageDynamicPermissionMiddleware()
 미들웨어 변경 후 최소 실행:
 
 ```powershell
-go test ./internal/middleware
+go test ./pkg/middleware
 ```
 
 인증/라우트 영향이 있으면 추가 실행:

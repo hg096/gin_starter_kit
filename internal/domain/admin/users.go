@@ -114,13 +114,47 @@ func (h *Handler) GetUsers(c *gin.Context) {
 	pagination := utils.PaginationFromQuery(c, 20, 100)
 	userType := strings.TrimSpace(c.Query("user_type"))
 
-	result, err := h.service.GetAllUsers(pagination.Page, pagination.Limit, userType)
+	query, countQuery, args := buildUserListQueries(userType)
+	query += " ORDER BY u_regi_date DESC LIMIT ? OFFSET ?"
+
+	var total int64
+	err := h.deps.db.DB.QueryRow(countQuery, args...).Scan(&total)
 	if err != nil {
-		response.FromError(c, err)
+		logger.Error("failed to query user count: %v", err)
+		response.FromError(c, errors.Wrap(err, "DATABASE_ERROR", "failed to query user count"))
 		return
 	}
 
-	response.Success(c, result)
+	queryArgs := append(args, pagination.Limit, pagination.Offset)
+	rows, err := h.deps.db.DB.Query(query, queryArgs...)
+	if err != nil {
+		logger.Error("failed to query users: %v", err)
+		response.FromError(c, errors.Wrap(err, "DATABASE_ERROR", "failed to query users"))
+		return
+	}
+	defer rows.Close()
+
+	users := make([]user.User, 0, pagination.Limit)
+	for rows.Next() {
+		var u user.User
+		if err := rows.Scan(&u.ID, &u.Name, &u.Email, &u.AuthType, &u.AuthLevel, &u.Status, &u.CreatedAt); err != nil {
+			response.FromError(c, errors.Wrap(err, "DATABASE_ERROR", "failed to map users"))
+			return
+		}
+		u.AuthType = authz.NormalizeAuthType(u.AuthType)
+		users = append(users, u)
+	}
+	if err := rows.Err(); err != nil {
+		response.FromError(c, errors.Wrap(err, "DATABASE_ERROR", "failed to iterate users"))
+		return
+	}
+
+	response.Success(c, &AdminUserListResponse{
+		Users: users,
+		Total: total,
+		Page:  pagination.Page,
+		Limit: pagination.Limit,
+	})
 }
 
 // GetUser returns user detail.
@@ -140,7 +174,7 @@ func (h *Handler) GetUser(c *gin.Context) {
 		return
 	}
 
-	userModel, err := h.service.GetUserByID(id)
+	userModel, err := h.deps.userRepo.FindByID(id)
 	if err != nil {
 		response.FromError(c, err)
 		return
@@ -189,7 +223,7 @@ func (h *Handler) UpdateUserAuth(c *gin.Context) {
 		return
 	}
 
-	if err := h.service.UpdateUserAuth(actor, id, req.AuthType, req.AuthLevel); err != nil {
+	if err := h.deps.UpdateUserAuth(actor, id, req.AuthType, req.AuthLevel); err != nil {
 		response.FromError(c, err)
 		return
 	}
@@ -226,7 +260,7 @@ func (h *Handler) UpdateUserProfile(c *gin.Context) {
 		return
 	}
 
-	if err := h.service.UpdateUserProfile(actor, id, &req); err != nil {
+	if err := h.deps.UpdateUserProfile(actor, id, &req); err != nil {
 		response.FromError(c, err)
 		return
 	}
@@ -263,7 +297,7 @@ func (h *Handler) UpdateUserStatus(c *gin.Context) {
 		return
 	}
 
-	if err := h.service.UpdateUserStatus(actor, id, req.Status); err != nil {
+	if err := h.deps.UpdateUserStatus(actor, id, req.Status); err != nil {
 		response.FromError(c, err)
 		return
 	}
@@ -300,7 +334,7 @@ func (h *Handler) ResetUserPassword(c *gin.Context) {
 		return
 	}
 
-	if err := h.service.ResetUserPassword(actor, id, req.NewPassword); err != nil {
+	if err := h.deps.ResetUserPassword(actor, id, req.NewPassword); err != nil {
 		response.FromError(c, err)
 		return
 	}
@@ -323,7 +357,12 @@ func (h *Handler) GetUserPermissions(c *gin.Context) {
 		return
 	}
 
-	permissions, err := h.service.GetUserPermissions(id)
+	if _, err := h.deps.userRepo.FindByID(id); err != nil {
+		response.FromError(c, errors.New("USER_NOT_FOUND", "user not found"))
+		return
+	}
+
+	permissions, err := h.deps.permissionRepo.ListUserPermissions(id)
 	if err != nil {
 		response.FromError(c, err)
 		return
@@ -361,7 +400,7 @@ func (h *Handler) UpdateUserPermissions(c *gin.Context) {
 		return
 	}
 
-	if err := h.service.UpdateUserPermissions(actor, id, req.Permissions); err != nil {
+	if err := h.deps.UpdateUserPermissions(actor, id, req.Permissions); err != nil {
 		response.FromError(c, err)
 		return
 	}
@@ -392,7 +431,7 @@ func (h *Handler) DeleteUser(c *gin.Context) {
 		return
 	}
 
-	if err := h.service.DeleteUser(actor, id); err != nil {
+	if err := h.deps.DeleteUser(actor, id); err != nil {
 		response.FromError(c, err)
 		return
 	}
@@ -409,30 +448,42 @@ func (h *Handler) DeleteUser(c *gin.Context) {
 // @Security     BearerAuth
 // @Router       /api/admin/stats [get]
 func (h *Handler) GetStats(c *gin.Context) {
-	stats, err := h.service.GetStats()
-	if err != nil {
-		response.FromError(c, err)
+	stats := &AdminStatsResponse{}
+
+	if err := h.deps.db.DB.QueryRow("SELECT COUNT(*) FROM _user").Scan(&stats.TotalUsers); err != nil {
+		response.FromError(c, errors.Wrap(err, "DATABASE_ERROR", "failed to query total users"))
 		return
+	}
+	if err := h.deps.db.DB.QueryRow("SELECT COUNT(*) FROM _user WHERE u_auth_type IN ('TA', 'A', 'M', 'G', 'AG')").Scan(&stats.AdminUsers); err != nil {
+		response.FromError(c, errors.Wrap(err, "DATABASE_ERROR", "failed to query admin users"))
+		return
+	}
+	if err := h.deps.db.DB.QueryRow("SELECT COUNT(*) FROM _user WHERE u_auth_type = 'U'").Scan(&stats.NormalUsers); err != nil {
+		response.FromError(c, errors.Wrap(err, "DATABASE_ERROR", "failed to query normal users"))
+		return
+	}
+	if err := h.deps.db.DB.QueryRow("SELECT COUNT(*) FROM _blog").Scan(&stats.TotalBlogs); err != nil {
+		stats.TotalBlogs = 0
 	}
 
 	response.Success(c, stats)
 }
 
-func (s *service) GetAllUsers(page, limit int, userType string) (*AdminUserListResponse, error) {
+func (d *deps) GetAllUsers(page, limit int, userType string) (*AdminUserListResponse, error) {
 	pagination := utils.NewPagination(page, limit, 20, 100)
 
 	query, countQuery, args := buildUserListQueries(userType)
 	query += " ORDER BY u_regi_date DESC LIMIT ? OFFSET ?"
 
 	var total int64
-	err := s.db.DB.QueryRow(countQuery, args...).Scan(&total)
+	err := d.db.DB.QueryRow(countQuery, args...).Scan(&total)
 	if err != nil {
 		logger.Error("failed to query user count: %v", err)
 		return nil, errors.Wrap(err, "DATABASE_ERROR", "failed to query user count")
 	}
 
 	queryArgs := append(args, pagination.Limit, pagination.Offset)
-	rows, err := s.db.DB.Query(query, queryArgs...)
+	rows, err := d.db.DB.Query(query, queryArgs...)
 	if err != nil {
 		logger.Error("failed to query users: %v", err)
 		return nil, errors.Wrap(err, "DATABASE_ERROR", "failed to query users")
@@ -460,22 +511,22 @@ func (s *service) GetAllUsers(page, limit int, userType string) (*AdminUserListR
 	}, nil
 }
 
-func (s *service) GetUserByID(id string) (*user.User, error) {
-	return s.userRepo.FindByID(id)
+func (d *deps) GetUserByID(id string) (*user.User, error) {
+	return d.userRepo.FindByID(id)
 }
 
-func (s *service) UpdateUserAuth(actor Actor, id string, authType string, authLevel int) error {
-	target, err := s.userRepo.FindByID(id)
+func (d *deps) UpdateUserAuth(actor Actor, id string, authType string, authLevel int) error {
+	target, err := d.userRepo.FindByID(id)
 	if err != nil {
 		return errors.New("USER_NOT_FOUND", "user not found")
 	}
 	target.AuthType = authz.NormalizeAuthType(target.AuthType)
 
 	if actor.ID == id {
-		return s.denyWithAudit(actor, id, "admin.account.level.manage", "self auth change is not allowed")
+		return d.denyWithAudit(actor, id, "admin.account.level.manage", "self auth change is not allowed")
 	}
 	if !actor.IsSuperAdmin {
-		return s.denyWithAudit(actor, id, "admin.account.level.manage", "only top-admin can change auth level")
+		return d.denyWithAudit(actor, id, "admin.account.level.manage", "only top-admin can change auth level")
 	}
 
 	authType = authz.NormalizeAuthType(authType)
@@ -499,19 +550,19 @@ func (s *service) UpdateUserAuth(actor Actor, id string, authType string, authLe
 		"u_re_token":          "",
 	}
 
-	return s.db.WithTx(func(tx *sql.Tx) error {
-		userRepo := s.userRepo.Tx(tx)
+	return d.db.WithTx(func(tx *sql.Tx) error {
+		userRepo := d.userRepo.Tx(tx)
 		if err := userRepo.Update(id, updates); err != nil {
 			return err
 		}
 
 		if !authz.IsAssignableAdminType(authType) {
-			if err := s.permissionRepo.DeleteUserPermissionsTx(tx, id); err != nil {
+			if err := d.permissionRepo.DeleteUserPermissionsTx(tx, id); err != nil {
 				return err
 			}
 		}
 
-		return s.permissionRepo.WriteAuditLogTx(tx, &AuditLogEntry{
+		return d.permissionRepo.WriteAuditLogTx(tx, &AuditLogEntry{
 			ActorID:  actor.ID,
 			TargetID: id,
 			Action:   "admin.account.level.manage",
@@ -529,15 +580,15 @@ func (s *service) UpdateUserAuth(actor Actor, id string, authType string, authLe
 	})
 }
 
-func (s *service) UpdateUserProfile(actor Actor, id string, req *AdminUpdateUserProfileRequest) error {
-	target, err := s.userRepo.FindByID(id)
+func (d *deps) UpdateUserProfile(actor Actor, id string, req *AdminUpdateUserProfileRequest) error {
+	target, err := d.userRepo.FindByID(id)
 	if err != nil {
 		return errors.New("USER_NOT_FOUND", "user not found")
 	}
 	target.AuthType = authz.NormalizeAuthType(target.AuthType)
 
 	if authz.IsAdminType(target.AuthType) && !CanManageTarget(actor, target) {
-		return s.denyWithAudit(actor, id, "admin.account.profile.update", "cannot manage this admin account")
+		return d.denyWithAudit(actor, id, "admin.account.profile.update", "cannot manage this admin account")
 	}
 
 	updates := map[string]interface{}{}
@@ -551,13 +602,13 @@ func (s *service) UpdateUserProfile(actor Actor, id string, req *AdminUpdateUser
 		return errors.New("NO_UPDATES", "no profile fields to update")
 	}
 
-	return s.db.WithTx(func(tx *sql.Tx) error {
-		userRepo := s.userRepo.Tx(tx)
+	return d.db.WithTx(func(tx *sql.Tx) error {
+		userRepo := d.userRepo.Tx(tx)
 		if err := userRepo.Update(id, updates); err != nil {
 			return err
 		}
 
-		return s.permissionRepo.WriteAuditLogTx(tx, &AuditLogEntry{
+		return d.permissionRepo.WriteAuditLogTx(tx, &AuditLogEntry{
 			ActorID:  actor.ID,
 			TargetID: id,
 			Action:   "admin.account.profile.update",
@@ -575,23 +626,23 @@ func (s *service) UpdateUserProfile(actor Actor, id string, req *AdminUpdateUser
 	})
 }
 
-func (s *service) UpdateUserStatus(actor Actor, id string, status string) error {
+func (d *deps) UpdateUserStatus(actor Actor, id string, status string) error {
 	normalizedStatus := utils.TrimLower(status)
 	if normalizedStatus != user.UserStatusActive && normalizedStatus != user.UserStatusLocked {
 		return errors.New("BAD_REQUEST", "status must be active or locked")
 	}
 
-	target, err := s.userRepo.FindByID(id)
+	target, err := d.userRepo.FindByID(id)
 	if err != nil {
 		return errors.New("USER_NOT_FOUND", "user not found")
 	}
 	target.AuthType = authz.NormalizeAuthType(target.AuthType)
 
 	if actor.ID == id {
-		return s.denyWithAudit(actor, id, "admin.account.status.update", "self status change is not allowed")
+		return d.denyWithAudit(actor, id, "admin.account.status.update", "self status change is not allowed")
 	}
 	if authz.IsAdminType(target.AuthType) && !CanManageTarget(actor, target) {
-		return s.denyWithAudit(actor, id, "admin.account.status.update", "cannot manage this admin account")
+		return d.denyWithAudit(actor, id, "admin.account.status.update", "cannot manage this admin account")
 	}
 
 	updates := map[string]interface{}{
@@ -600,13 +651,13 @@ func (s *service) UpdateUserStatus(actor Actor, id string, status string) error 
 		"u_re_token":          "",
 	}
 
-	return s.db.WithTx(func(tx *sql.Tx) error {
-		userRepo := s.userRepo.Tx(tx)
+	return d.db.WithTx(func(tx *sql.Tx) error {
+		userRepo := d.userRepo.Tx(tx)
 		if err := userRepo.Update(id, updates); err != nil {
 			return err
 		}
 
-		return s.permissionRepo.WriteAuditLogTx(tx, &AuditLogEntry{
+		return d.permissionRepo.WriteAuditLogTx(tx, &AuditLogEntry{
 			ActorID:  actor.ID,
 			TargetID: id,
 			Action:   "admin.account.status.update",
@@ -622,20 +673,20 @@ func (s *service) UpdateUserStatus(actor Actor, id string, status string) error 
 	})
 }
 
-func (s *service) ResetUserPassword(actor Actor, id string, newPassword string) error {
+func (d *deps) ResetUserPassword(actor Actor, id string, newPassword string) error {
 	newPassword = strings.TrimSpace(newPassword)
 	if len(newPassword) < 6 || len(newPassword) > 50 {
 		return errors.New("BAD_REQUEST", "password length must be 6-50")
 	}
 
-	target, err := s.userRepo.FindByID(id)
+	target, err := d.userRepo.FindByID(id)
 	if err != nil {
 		return errors.New("USER_NOT_FOUND", "user not found")
 	}
 	target.AuthType = authz.NormalizeAuthType(target.AuthType)
 
 	if authz.IsAdminType(target.AuthType) && actor.ID != id && !CanManageTarget(actor, target) {
-		return s.denyWithAudit(actor, id, "admin.account.password.reset", "cannot manage this admin account")
+		return d.denyWithAudit(actor, id, "admin.account.password.reset", "cannot manage this admin account")
 	}
 
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
@@ -649,13 +700,13 @@ func (s *service) ResetUserPassword(actor Actor, id string, newPassword string) 
 		"u_re_token":          "",
 	}
 
-	return s.db.WithTx(func(tx *sql.Tx) error {
-		userRepo := s.userRepo.Tx(tx)
+	return d.db.WithTx(func(tx *sql.Tx) error {
+		userRepo := d.userRepo.Tx(tx)
 		if err := userRepo.Update(id, updates); err != nil {
 			return err
 		}
 
-		return s.permissionRepo.WriteAuditLogTx(tx, &AuditLogEntry{
+		return d.permissionRepo.WriteAuditLogTx(tx, &AuditLogEntry{
 			ActorID:  actor.ID,
 			TargetID: id,
 			Action:   "admin.account.password.reset",
@@ -668,15 +719,15 @@ func (s *service) ResetUserPassword(actor Actor, id string, newPassword string) 
 	})
 }
 
-func (s *service) GetUserPermissions(id string) ([]string, error) {
-	if _, err := s.userRepo.FindByID(id); err != nil {
+func (d *deps) GetUserPermissions(id string) ([]string, error) {
+	if _, err := d.userRepo.FindByID(id); err != nil {
 		return nil, errors.New("USER_NOT_FOUND", "user not found")
 	}
-	return s.permissionRepo.ListUserPermissions(id)
+	return d.permissionRepo.ListUserPermissions(id)
 }
 
-func (s *service) UpdateUserPermissions(actor Actor, id string, permissionCodes []string) error {
-	target, err := s.userRepo.FindByID(id)
+func (d *deps) UpdateUserPermissions(actor Actor, id string, permissionCodes []string) error {
+	target, err := d.userRepo.FindByID(id)
 	if err != nil {
 		return errors.New("USER_NOT_FOUND", "user not found")
 	}
@@ -686,22 +737,22 @@ func (s *service) UpdateUserPermissions(actor Actor, id string, permissionCodes 
 	}
 
 	if actor.ID == id {
-		return s.denyWithAudit(actor, id, "admin.account.permission.manage", "self permission change is not allowed")
+		return d.denyWithAudit(actor, id, "admin.account.permission.manage", "self permission change is not allowed")
 	}
 	if !actor.IsSuperAdmin && !CanManageTarget(actor, target) {
-		return s.denyWithAudit(actor, id, "admin.account.permission.manage", "cannot manage this admin account")
+		return d.denyWithAudit(actor, id, "admin.account.permission.manage", "cannot manage this admin account")
 	}
 
 	codes := normalizePermissionCodes(permissionCodes)
-	if err := s.ensureKnownPermissionCodes(codes); err != nil {
+	if err := d.ensureKnownPermissionCodes(codes); err != nil {
 		return err
 	}
-	exists, err := s.permissionRepo.PermissionCodesExist(codes)
+	exists, err := d.permissionRepo.PermissionCodesExist(codes)
 	if err != nil {
 		return err
 	}
 	if !exists {
-		unknown, unknownErr := s.findUnknownPermissionCodes(codes)
+		unknown, unknownErr := d.findUnknownPermissionCodes(codes)
 		if unknownErr == nil && len(unknown) > 0 {
 			return errors.New("BAD_REQUEST", "unknown permission code in request: "+strings.Join(unknown, ", "))
 		}
@@ -709,26 +760,26 @@ func (s *service) UpdateUserPermissions(actor Actor, id string, permissionCodes 
 	}
 
 	if !actor.IsSuperAdmin {
-		delegableSet, err := s.permissionRepo.DelegableSet()
+		delegableSet, err := d.permissionRepo.DelegableSet()
 		if err != nil {
 			return err
 		}
 		if err := ValidateDelegation(codes, delegableSet); err != nil {
-			return s.denyWithAudit(actor, id, "admin.account.permission.manage", "permission delegation is not allowed")
+			return d.denyWithAudit(actor, id, "admin.account.permission.manage", "permission delegation is not allowed")
 		}
 	}
 
-	beforePermissions, err := s.permissionRepo.ListUserPermissions(id)
+	beforePermissions, err := d.permissionRepo.ListUserPermissions(id)
 	if err != nil {
 		return err
 	}
 
-	return s.db.WithTx(func(tx *sql.Tx) error {
-		if err := s.permissionRepo.ReplaceUserPermissionsTx(tx, id, codes); err != nil {
+	return d.db.WithTx(func(tx *sql.Tx) error {
+		if err := d.permissionRepo.ReplaceUserPermissionsTx(tx, id, codes); err != nil {
 			return err
 		}
 
-		userRepo := s.userRepo.Tx(tx)
+		userRepo := d.userRepo.Tx(tx)
 		if err := userRepo.Update(id, map[string]interface{}{
 			"u_token_valid_after": time.Now(),
 			"u_re_token":          "",
@@ -736,7 +787,7 @@ func (s *service) UpdateUserPermissions(actor Actor, id string, permissionCodes 
 			return err
 		}
 
-		return s.permissionRepo.WriteAuditLogTx(tx, &AuditLogEntry{
+		return d.permissionRepo.WriteAuditLogTx(tx, &AuditLogEntry{
 			ActorID:  actor.ID,
 			TargetID: id,
 			Action:   "admin.account.permission.manage",
@@ -752,29 +803,29 @@ func (s *service) UpdateUserPermissions(actor Actor, id string, permissionCodes 
 	})
 }
 
-func (s *service) DeleteUser(actor Actor, id string) error {
-	target, err := s.userRepo.FindByID(id)
+func (d *deps) DeleteUser(actor Actor, id string) error {
+	target, err := d.userRepo.FindByID(id)
 	if err != nil {
 		return errors.New("USER_NOT_FOUND", "user not found")
 	}
 
 	if actor.ID == id {
-		return s.denyWithAudit(actor, id, "admin.account.delete", "self deletion is not allowed")
+		return d.denyWithAudit(actor, id, "admin.account.delete", "self deletion is not allowed")
 	}
 	if !actor.IsSuperAdmin {
-		return s.denyWithAudit(actor, id, "admin.account.delete", "only top-admin can delete user")
+		return d.denyWithAudit(actor, id, "admin.account.delete", "only top-admin can delete user")
 	}
 
-	return s.db.WithTx(func(tx *sql.Tx) error {
-		if err := s.permissionRepo.DeleteUserPermissionsTx(tx, id); err != nil {
+	return d.db.WithTx(func(tx *sql.Tx) error {
+		if err := d.permissionRepo.DeleteUserPermissionsTx(tx, id); err != nil {
 			return err
 		}
-		userRepo := s.userRepo.Tx(tx)
+		userRepo := d.userRepo.Tx(tx)
 		if err := userRepo.Delete(id); err != nil {
 			return err
 		}
 
-		return s.permissionRepo.WriteAuditLogTx(tx, &AuditLogEntry{
+		return d.permissionRepo.WriteAuditLogTx(tx, &AuditLogEntry{
 			ActorID:  actor.ID,
 			TargetID: id,
 			Action:   "admin.account.delete",
@@ -789,25 +840,25 @@ func (s *service) DeleteUser(actor Actor, id string) error {
 	})
 }
 
-func (s *service) GetStats() (*AdminStatsResponse, error) {
+func (d *deps) GetStats() (*AdminStatsResponse, error) {
 	stats := &AdminStatsResponse{}
 
-	err := s.db.DB.QueryRow("SELECT COUNT(*) FROM _user").Scan(&stats.TotalUsers)
+	err := d.db.DB.QueryRow("SELECT COUNT(*) FROM _user").Scan(&stats.TotalUsers)
 	if err != nil {
 		return nil, errors.Wrap(err, "DATABASE_ERROR", "failed to query total users")
 	}
 
-	err = s.db.DB.QueryRow("SELECT COUNT(*) FROM _user WHERE u_auth_type IN ('TA', 'A', 'M', 'G', 'AG')").Scan(&stats.AdminUsers)
+	err = d.db.DB.QueryRow("SELECT COUNT(*) FROM _user WHERE u_auth_type IN ('TA', 'A', 'M', 'G', 'AG')").Scan(&stats.AdminUsers)
 	if err != nil {
 		return nil, errors.Wrap(err, "DATABASE_ERROR", "failed to query admin users")
 	}
 
-	err = s.db.DB.QueryRow("SELECT COUNT(*) FROM _user WHERE u_auth_type = 'U'").Scan(&stats.NormalUsers)
+	err = d.db.DB.QueryRow("SELECT COUNT(*) FROM _user WHERE u_auth_type = 'U'").Scan(&stats.NormalUsers)
 	if err != nil {
 		return nil, errors.Wrap(err, "DATABASE_ERROR", "failed to query normal users")
 	}
 
-	err = s.db.DB.QueryRow("SELECT COUNT(*) FROM _blog").Scan(&stats.TotalBlogs)
+	err = d.db.DB.QueryRow("SELECT COUNT(*) FROM _blog").Scan(&stats.TotalBlogs)
 	if err != nil {
 		stats.TotalBlogs = 0
 	}

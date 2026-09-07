@@ -782,11 +782,7 @@ func splitFilterCSV(raw string) []string {
 }
 
 func isMissingTableErrorForSettings(err error) bool {
-	if err == nil {
-		return false
-	}
-	msg := utils.TrimLower(err.Error())
-	return strings.Contains(msg, "doesn't exist") || strings.Contains(msg, "no such table")
+	return database.IsMissingTableError(err)
 }
 
 func scanAdminPageRow(scanner interface {
@@ -852,7 +848,7 @@ func (r *permissionRepository) upsertPermissionCodeTx(tx *sql.Tx, code string, d
 	}
 
 	var existingCount int
-	if err := r.base.QueryRowTx(tx, "SELECT COUNT(*) FROM _a_permissions WHERE permission_code = ?", code).Scan(&existingCount); err != nil {
+	if err := txRepo.QueryRow("SELECT COUNT(*) FROM _a_permissions WHERE permission_code = ?", code).Scan(&existingCount); err != nil {
 		return errors.Wrap(err, "DATABASE_ERROR", "failed to check page permission existence")
 	}
 	if existingCount > 0 {

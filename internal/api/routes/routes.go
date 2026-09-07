@@ -46,8 +46,8 @@ func SetupRoutes(r *gin.Engine, db *database.DB, cfg *config.Config) {
 
 func setupUserRoutes(rg *gin.RouterGroup, db *database.DB, cfg *config.Config) {
 	repo := user.NewRepository(db)
-	service := user.NewService(repo, cfg)
-	handler := user.NewHandler(service, cfg)
+	deps := user.NewDeps(repo, cfg)
+	handler := user.NewHandler(deps, cfg)
 
 	userGroup := rg.Group("/user")
 	{
@@ -67,8 +67,8 @@ func setupUserRoutes(rg *gin.RouterGroup, db *database.DB, cfg *config.Config) {
 
 func setupBlogRoutes(rg *gin.RouterGroup, db *database.DB, cfg *config.Config) {
 	repo := blog.NewRepository(db)
-	service := blog.NewService(repo)
-	handler := blog.NewHandler(service)
+	deps := blog.NewDeps(repo)
+	handler := blog.NewHandler(deps)
 
 	blogGroup := rg.Group("/blog")
 	{
@@ -87,10 +87,14 @@ func setupBlogRoutes(rg *gin.RouterGroup, db *database.DB, cfg *config.Config) {
 }
 
 func setupAdminPageRoutes(r *gin.Engine, db *database.DB, cfg *config.Config) {
-	var pageService admin.Service
+	var pageService interface {
+		GetAdminPages(includeDisabled bool) ([]admin.AdminPage, error)
+		GetAdminPageByKey(pageKey string) (*admin.AdminPage, error)
+		SyncAdminPagesFromRouteSpecs(routeSpecs []admin.AdminPageRouteSpec) error
+	}
 	if db != nil && db.DB != nil {
 		userRepo := user.NewRepository(db)
-		pageService = admin.NewService(userRepo, db)
+		pageService = admin.NewDeps(userRepo, db)
 	}
 	pageHandler := admin.NewPageHandler(cfg, pageService)
 	viewRoutes := adminPageViewRoutes(pageHandler)
@@ -207,8 +211,8 @@ func setupAdminRoutes(rg *gin.RouterGroup, db *database.DB, cfg *config.Config) 
 	}
 
 	userRepo := user.NewRepository(db)
-	service := admin.NewService(userRepo, db)
-	handler := admin.NewHandler(service)
+	deps := admin.NewDeps(userRepo, db)
+	handler := admin.NewHandler(deps)
 
 	rg.GET("/admin/bootstrap/status", handler.GetBootstrapStatus)
 	rg.POST("/admin/bootstrap/super-admin", handler.BootstrapSuperAdmin)

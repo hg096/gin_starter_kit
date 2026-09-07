@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -20,16 +21,18 @@ var chatRoomKeyPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{1,79}$`)
 
 // Handler handles websocket and admin-chat API endpoints.
 type Handler struct {
-	hub         *Hub
-	cfg         *config.Config
-	chatService ChatService
+	hub      *Hub
+	cfg      *config.Config
+	chat     ChatRepository
+	initOnce sync.Once
+	initErr  error
 }
 
-func NewHandler(hub *Hub, cfg *config.Config, chatService ChatService) *Handler {
+func NewHandler(hub *Hub, cfg *config.Config, chatRepo ChatRepository) *Handler {
 	return &Handler{
-		hub:         hub,
-		cfg:         cfg,
-		chatService: chatService,
+		hub:  hub,
+		cfg:  cfg,
+		chat: chatRepo,
 	}
 }
 
@@ -65,8 +68,8 @@ func (h *Handler) HandleAdminChat(c *gin.Context) {
 		return
 	}
 
-	if h.chatService == nil {
-		response.FromError(c, appErrors.New("DATABASE_ERROR", "chat service is not available"))
+	if h.chat == nil {
+		response.FromError(c, appErrors.New("DATABASE_ERROR", "chat repository is not available"))
 		return
 	}
 
@@ -76,7 +79,7 @@ func (h *Handler) HandleAdminChat(c *gin.Context) {
 		return
 	}
 
-	allowed, err := h.chatService.CanAccessRoom(userID, roomKey)
+	allowed, err := h.canAccessRoom(userID, roomKey)
 	if err != nil {
 		response.FromError(c, err)
 		return
@@ -101,13 +104,25 @@ func (h *Handler) HandleAdminChatNotify(c *gin.Context) {
 
 // ListChatRooms returns available rooms for current admin.
 func (h *Handler) ListChatRooms(c *gin.Context) {
-	if h.chatService == nil {
-		response.FromError(c, appErrors.New("DATABASE_ERROR", "chat service is not available"))
+	if h.chat == nil {
+		response.FromError(c, appErrors.New("DATABASE_ERROR", "chat repository is not available"))
 		return
 	}
 
 	userID := strings.TrimSpace(c.GetString("user_id"))
-	rooms, err := h.chatService.ListRooms(userID)
+	if userID == "" {
+		response.FromError(c, appErrors.New("UNAUTHORIZED", "authentication context missing"))
+		return
+	}
+	if err := h.ensureChatInitialized(); err != nil {
+		response.FromError(c, err)
+		return
+	}
+	if err := h.chat.EnsureRoomMember(AdminLoungeRoomKey, userID); err != nil {
+		logger.Warn("skip admin-lounge membership sync for user=%s: %v", userID, err)
+	}
+
+	rooms, err := h.chat.ListRoomsForUser(userID)
 	if err != nil {
 		response.FromError(c, err)
 		return
@@ -122,12 +137,16 @@ func (h *Handler) ListChatRooms(c *gin.Context) {
 
 // ListChatUsers returns admin users available for group/direct chat.
 func (h *Handler) ListChatUsers(c *gin.Context) {
-	if h.chatService == nil {
-		response.FromError(c, appErrors.New("DATABASE_ERROR", "chat service is not available"))
+	if h.chat == nil {
+		response.FromError(c, appErrors.New("DATABASE_ERROR", "chat repository is not available"))
 		return
 	}
 
-	users, err := h.chatService.ListAdminUsers()
+	if err := h.ensureChatInitialized(); err != nil {
+		response.FromError(c, err)
+		return
+	}
+	users, err := h.chat.ListAdminUsers()
 	if err != nil {
 		response.FromError(c, err)
 		return
@@ -138,8 +157,8 @@ func (h *Handler) ListChatUsers(c *gin.Context) {
 
 // CreateGroupRoom creates an admin group room.
 func (h *Handler) CreateGroupRoom(c *gin.Context) {
-	if h.chatService == nil {
-		response.FromError(c, appErrors.New("DATABASE_ERROR", "chat service is not available"))
+	if h.chat == nil {
+		response.FromError(c, appErrors.New("DATABASE_ERROR", "chat repository is not available"))
 		return
 	}
 
@@ -150,7 +169,39 @@ func (h *Handler) CreateGroupRoom(c *gin.Context) {
 		return
 	}
 
-	room, err := h.chatService.CreateGroupRoom(userID, &req)
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
+		response.FromError(c, appErrors.New("UNAUTHORIZED", "authentication context missing"))
+		return
+	}
+	if err := h.ensureChatInitialized(); err != nil {
+		response.FromError(c, err)
+		return
+	}
+
+	roomName := strings.TrimSpace(req.Name)
+	if roomName == "" {
+		response.FromError(c, appErrors.New("BAD_REQUEST", "group room name is required"))
+		return
+	}
+	if len(roomName) > 120 {
+		response.FromError(c, appErrors.New("BAD_REQUEST", "group room name must be <= 120 chars"))
+		return
+	}
+
+	members := normalizeMemberIDs(userID, req.MemberIDs)
+	if len(members) < 2 {
+		response.FromError(c, appErrors.New("BAD_REQUEST", "group room requires at least two members"))
+		return
+	}
+
+	roomKey, err := buildGroupRoomKey()
+	if err != nil {
+		response.FromError(c, appErrors.Wrap(err, "INTERNAL_ERROR", "failed to generate room key"))
+		return
+	}
+
+	room, err := h.chat.CreateGroupRoom(userID, roomKey, roomName, members)
 	if err != nil {
 		response.FromError(c, err)
 		return
@@ -165,15 +216,33 @@ func (h *Handler) CreateGroupRoom(c *gin.Context) {
 
 // CreateDirectRoom creates or returns 1:1 room with target admin.
 func (h *Handler) CreateDirectRoom(c *gin.Context) {
-	if h.chatService == nil {
-		response.FromError(c, appErrors.New("DATABASE_ERROR", "chat service is not available"))
+	if h.chat == nil {
+		response.FromError(c, appErrors.New("DATABASE_ERROR", "chat repository is not available"))
 		return
 	}
 
 	userID := strings.TrimSpace(c.GetString("user_id"))
 	targetID := strings.TrimSpace(c.Param("target_id"))
+	if userID == "" {
+		response.FromError(c, appErrors.New("UNAUTHORIZED", "authentication context missing"))
+		return
+	}
+	if targetID == "" {
+		response.FromError(c, appErrors.New("BAD_REQUEST", "target_id is required"))
+		return
+	}
+	if strings.EqualFold(userID, targetID) {
+		response.FromError(c, appErrors.New("BAD_REQUEST", "cannot create direct room with yourself"))
+		return
+	}
+	if err := h.ensureChatInitialized(); err != nil {
+		response.FromError(c, err)
+		return
+	}
 
-	room, err := h.chatService.GetOrCreateDirectRoom(userID, targetID)
+	roomKey := buildDirectRoomKey(userID, targetID)
+	roomName := "1:1 " + userID + " ↔ " + targetID
+	room, err := h.chat.GetOrCreateDirectRoom(userID, roomKey, roomName, targetID)
 	if err != nil {
 		response.FromError(c, err)
 		return
@@ -185,8 +254,8 @@ func (h *Handler) CreateDirectRoom(c *gin.Context) {
 
 // ListChatMessages returns room messages (supports before_id pagination).
 func (h *Handler) ListChatMessages(c *gin.Context) {
-	if h.chatService == nil {
-		response.FromError(c, appErrors.New("DATABASE_ERROR", "chat service is not available"))
+	if h.chat == nil {
+		response.FromError(c, appErrors.New("DATABASE_ERROR", "chat repository is not available"))
 		return
 	}
 
@@ -200,7 +269,16 @@ func (h *Handler) ListChatMessages(c *gin.Context) {
 	limit := chatQueryNumeric[int](c, "limit", "50", 50)
 	beforeID := chatQueryNumeric[int64](c, "before_id", "0", 0)
 
-	messages, err := h.chatService.ListMessages(userID, roomKey, limit, beforeID)
+	allowed, err := h.canAccessRoom(userID, roomKey)
+	if err != nil {
+		response.FromError(c, err)
+		return
+	}
+	if !allowed {
+		response.FromError(c, appErrors.New("FORBIDDEN", "chat room access denied"))
+		return
+	}
+	messages, err := h.chat.ListMessages(roomKey, limit, beforeID)
 	if err != nil {
 		response.FromError(c, err)
 		return
@@ -219,8 +297,8 @@ func chatQueryNumeric[T utils.Numeric](c *gin.Context, key string, defaultRaw st
 
 // CreateChatMessage creates a chat message or reply(comment) in room.
 func (h *Handler) CreateChatMessage(c *gin.Context) {
-	if h.chatService == nil {
-		response.FromError(c, appErrors.New("DATABASE_ERROR", "chat service is not available"))
+	if h.chat == nil {
+		response.FromError(c, appErrors.New("DATABASE_ERROR", "chat repository is not available"))
 		return
 	}
 
@@ -237,7 +315,27 @@ func (h *Handler) CreateChatMessage(c *gin.Context) {
 		return
 	}
 
-	message, err := h.chatService.CreateMessage(userID, roomKey, &req)
+	content := strings.TrimSpace(req.Content)
+	if content == "" {
+		response.FromError(c, appErrors.New("BAD_REQUEST", "message content is required"))
+		return
+	}
+	if len(content) > 2000 {
+		response.FromError(c, appErrors.New("BAD_REQUEST", "message content must be <= 2000 chars"))
+		return
+	}
+
+	allowed, err := h.canAccessRoom(userID, roomKey)
+	if err != nil {
+		response.FromError(c, err)
+		return
+	}
+	if !allowed {
+		response.FromError(c, appErrors.New("FORBIDDEN", "chat room access denied"))
+		return
+	}
+
+	message, err := h.chat.CreateMessage(roomKey, userID, content, req.ParentID)
 	if err != nil {
 		response.FromError(c, err)
 		return
@@ -264,8 +362,8 @@ func (h *Handler) CreateChatMessage(c *gin.Context) {
 
 // MarkChatRoomRead marks room messages as read for current user.
 func (h *Handler) MarkChatRoomRead(c *gin.Context) {
-	if h.chatService == nil {
-		response.FromError(c, appErrors.New("DATABASE_ERROR", "chat service is not available"))
+	if h.chat == nil {
+		response.FromError(c, appErrors.New("DATABASE_ERROR", "chat repository is not available"))
 		return
 	}
 
@@ -282,7 +380,17 @@ func (h *Handler) MarkChatRoomRead(c *gin.Context) {
 		req.LastMessageID = 0
 	}
 
-	if err := h.chatService.MarkRoomRead(userID, roomKey, req.LastMessageID); err != nil {
+	allowed, err := h.canAccessRoom(userID, roomKey)
+	if err != nil {
+		response.FromError(c, err)
+		return
+	}
+	if !allowed {
+		response.FromError(c, appErrors.New("FORBIDDEN", "chat room access denied"))
+		return
+	}
+
+	if err := h.chat.MarkRoomRead(roomKey, userID, req.LastMessageID); err != nil {
 		response.FromError(c, err)
 		return
 	}
@@ -337,9 +445,9 @@ func (h *Handler) GetRoomInfo(c *gin.Context) {
 		return
 	}
 
-	if h.chatService != nil && isManagedAdminRoom(roomID) {
+	if h.chat != nil && isManagedAdminRoom(roomID) {
 		userID := strings.TrimSpace(c.GetString("user_id"))
-		allowed, err := h.chatService.CanAccessRoom(userID, roomID)
+		allowed, err := h.canAccessRoom(userID, roomID)
 		if err != nil {
 			response.FromError(c, err)
 			return
@@ -376,16 +484,15 @@ func (h *Handler) GetStats(c *gin.Context) {
 
 // SetupWebSocketRoutes registers websocket routes.
 func SetupWebSocketRoutes(r *gin.Engine, hub *Hub, cfg *config.Config) {
-	var chatService ChatService
+	var chatRepo ChatRepository
 	if db := database.GetDB(); db != nil {
-		repo := NewChatRepository(db)
-		chatService = NewChatService(repo)
-		if err := chatService.EnsureInitialized(); err != nil {
-			logger.Warn("failed to initialize chat schema: %v", err)
-		}
+		chatRepo = NewChatRepository(db)
 	}
 
-	handler := NewHandler(hub, cfg, chatService)
+	handler := NewHandler(hub, cfg, chatRepo)
+	if err := handler.ensureChatInitialized(); err != nil {
+		logger.Warn("failed to initialize chat schema: %v", err)
+	}
 
 	ws := r.Group("/ws")
 	ws.Use(middleware.AuthMiddleware(cfg))
@@ -439,11 +546,19 @@ func buildNotifyRoomKey(userID string) string {
 }
 
 func (h *Handler) publishRoomUnreadSnapshots(roomKey string) {
-	if h.chatService == nil {
+	if h.chat == nil {
 		return
 	}
 
-	snapshots, err := h.chatService.ListRoomUnreadSnapshots(roomKey)
+	roomKey = strings.TrimSpace(roomKey)
+	if roomKey == "" {
+		return
+	}
+	if err := h.ensureChatInitialized(); err != nil {
+		logger.Warn("failed to initialize chat before unread publish: %v", err)
+		return
+	}
+	snapshots, err := h.chat.ListRoomUnreadSnapshots(roomKey)
 	if err != nil {
 		logger.Warn("failed to publish room unread snapshots (room=%s): %v", roomKey, err)
 		return
@@ -460,4 +575,43 @@ func (h *Handler) publishRoomUnreadSnapshots(roomKey string) {
 			},
 		})
 	}
+}
+
+func (h *Handler) ensureChatInitialized() error {
+	if h.chat == nil {
+		return appErrors.New("DATABASE_ERROR", "chat repository is not available")
+	}
+
+	h.initOnce.Do(func() {
+		if err := h.chat.EnsureSchema(); err != nil {
+			h.initErr = err
+			return
+		}
+		if err := h.chat.EnsureDefaultAdminRoom(); err != nil {
+			logger.Warn("chat default room seed skipped: %v", err)
+		}
+	})
+	return h.initErr
+}
+
+func (h *Handler) canAccessRoom(userID, roomKey string) (bool, error) {
+	userID = strings.TrimSpace(userID)
+	roomKey = strings.TrimSpace(roomKey)
+	if userID == "" {
+		return false, appErrors.New("UNAUTHORIZED", "authentication context missing")
+	}
+	if roomKey == "" {
+		return false, appErrors.New("BAD_REQUEST", "room_key is required")
+	}
+	if err := h.ensureChatInitialized(); err != nil {
+		return false, err
+	}
+
+	if roomKey == AdminLoungeRoomKey {
+		if err := h.chat.EnsureRoomMember(AdminLoungeRoomKey, userID); err != nil {
+			return false, err
+		}
+	}
+
+	return h.chat.IsRoomMember(roomKey, userID)
 }

@@ -34,96 +34,87 @@ type LoginResponse struct {
 // @Success 200 {object} response.Response
 // @Router /api/user/login [post]
 func (h *Handler) Login(c *gin.Context) {
-	req, ok := readLoginRequest(c)
-	if !ok {
-		return
-	}
-
-	loginResp, err := h.service.Login(req)
-	if err != nil {
-		response.FromError(c, err)
-		return
-	}
-
-	h.setAuthCookies(c, loginResp.AccessToken, loginResp.RefreshToken)
-	response.Success(c, loginResp)
-}
-
-func readLoginRequest(c *gin.Context) (*LoginRequest, bool) {
 	result := validator.Validate(c, []validator.Rule{
 		{Field: "user_id", Label: "아이디", Required: true},
 		{Field: "user_pass", Label: "비밀번호", Required: true},
 	})
 	if !result.Valid {
 		response.ValidationError(c, result.GetErrorMap())
-		return nil, false
+		return
 	}
 
-	return &LoginRequest{
+	req := &LoginRequest{
 		ID:       result.Values["user_id"],
 		Password: result.Values["user_pass"],
-	}, true
-}
+	}
 
-func (s *service) Login(req *LoginRequest) (*LoginResponse, error) {
-	user, err := s.repo.FindByID(req.ID)
+	user, err := h.deps.repo.FindByID(req.ID)
 	if err != nil {
 		if errors.Is(err, errors.ErrUserNotFound) {
-			return nil, errors.ErrInvalidCredentials
+			response.FromError(c, errors.ErrInvalidCredentials)
+			return
 		}
-		return nil, err
+		response.FromError(c, err)
+		return
 	}
 
 	if utils.TrimLower(user.Status) == UserStatusLocked {
-		return nil, errors.ErrAccountLocked
+		response.FromError(c, errors.ErrAccountLocked)
+		return
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
 		logger.Warn("login failed (bad password): %s", req.ID)
-		return nil, errors.ErrInvalidCredentials
+		response.FromError(c, errors.ErrInvalidCredentials)
+		return
 	}
 
 	accessToken, err := middleware.GenerateToken(
 		user.ID,
 		user.AuthType,
 		user.AuthLevel,
-		s.config.JWT.AccessExpireMin,
-		s.config.JWT.AccessSecret,
-		s.config.JWT.TokenSecret,
-		s.config.JWT.Issuer,
-		s.config.JWT.Audience,
-		s.config.JWT.Subject,
+		h.deps.config.JWT.AccessExpireMin,
+		h.deps.config.JWT.AccessSecret,
+		h.deps.config.JWT.TokenSecret,
+		h.deps.config.JWT.Issuer,
+		h.deps.config.JWT.Audience,
+		h.deps.config.JWT.Subject,
 	)
 	if err != nil {
 		logger.Error("failed to generate access token: %v", err)
-		return nil, errors.Wrap(err, "TOKEN_GENERATION_FAILED", "failed to generate token")
+		response.FromError(c, errors.Wrap(err, "TOKEN_GENERATION_FAILED", "failed to generate token"))
+		return
 	}
 
 	refreshToken, err := middleware.GenerateToken(
 		user.ID,
 		user.AuthType,
 		user.AuthLevel,
-		s.config.JWT.RefreshExpireDays*24*60,
-		s.config.JWT.RefreshSecret,
-		s.config.JWT.TokenSecret,
-		s.config.JWT.Issuer,
-		s.config.JWT.Audience,
-		s.config.JWT.Subject,
+		h.deps.config.JWT.RefreshExpireDays*24*60,
+		h.deps.config.JWT.RefreshSecret,
+		h.deps.config.JWT.TokenSecret,
+		h.deps.config.JWT.Issuer,
+		h.deps.config.JWT.Audience,
+		h.deps.config.JWT.Subject,
 	)
 	if err != nil {
 		logger.Error("failed to generate refresh token: %v", err)
-		return nil, errors.Wrap(err, "TOKEN_GENERATION_FAILED", "failed to generate token")
+		response.FromError(c, errors.Wrap(err, "TOKEN_GENERATION_FAILED", "failed to generate token"))
+		return
 	}
 
-	if err := s.repo.UpdateRefreshToken(user.ID, hashRefreshToken(refreshToken)); err != nil {
-		return nil, err
+	if err := h.deps.repo.UpdateRefreshToken(user.ID, hashRefreshToken(refreshToken)); err != nil {
+		response.FromError(c, err)
+		return
 	}
 
 	logger.Info("login success: %s", user.ID)
 
-	return &LoginResponse{
+	loginResp := &LoginResponse{
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
 		User:         user.ToPublic(),
-	}, nil
+	}
+	h.setAuthCookies(c, loginResp.AccessToken, loginResp.RefreshToken)
+	response.Success(c, loginResp)
 }

@@ -32,13 +32,13 @@ func (h *Handler) GetProfile(c *gin.Context) {
 		return
 	}
 
-	user, err := h.service.GetProfile(userID)
+	user, err := h.deps.repo.FindByID(userID)
 	if err != nil {
 		response.FromError(c, err)
 		return
 	}
 
-	response.Success(c, gin.H{"user": user})
+	response.Success(c, gin.H{"user": user.ToPublic()})
 }
 
 // UpdateProfile profile update endpoint.
@@ -56,20 +56,6 @@ func (h *Handler) UpdateProfile(c *gin.Context) {
 		return
 	}
 
-	req, ok := readUpdateProfileRequest(c)
-	if !ok {
-		return
-	}
-
-	if err := h.service.UpdateProfile(userID, req); err != nil {
-		response.FromError(c, err)
-		return
-	}
-
-	response.Success(c, gin.H{"message": "프로필이 수정되었습니다"})
-}
-
-func readUpdateProfileRequest(c *gin.Context) (*UpdateUserRequest, bool) {
 	result := validator.Validate(c, []validator.Rule{
 		{Field: "user_name", Label: "이름", MinLen: 2, MaxLen: 50, Pattern: validator.PatternKorEng},
 		{Field: "user_email", Label: "이메일", Pattern: validator.PatternEmail},
@@ -77,25 +63,15 @@ func readUpdateProfileRequest(c *gin.Context) (*UpdateUserRequest, bool) {
 	})
 	if !result.Valid {
 		response.ValidationError(c, result.GetErrorMap())
-		return nil, false
+		return
 	}
 
-	return &UpdateUserRequest{
+	req := &UpdateUserRequest{
 		Name:     result.Values["user_name"],
 		Email:    result.Values["user_email"],
 		Password: result.Values["user_pass"],
-	}, true
-}
-
-func (s *service) GetProfile(userID string) (*User, error) {
-	user, err := s.repo.FindByID(userID)
-	if err != nil {
-		return nil, err
 	}
-	return user.ToPublic(), nil
-}
 
-func (s *service) UpdateProfile(userID string, req *UpdateUserRequest) error {
 	updates := make(map[string]interface{})
 
 	if !utils.EmptyString(req.Name) {
@@ -108,7 +84,8 @@ func (s *service) UpdateProfile(userID string, req *UpdateUserRequest) error {
 		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 		if err != nil {
 			logger.Error("failed to hash password: %v", err)
-			return errors.Wrap(err, "PASSWORD_HASH_FAILED", "failed to process password")
+			response.FromError(c, errors.Wrap(err, "PASSWORD_HASH_FAILED", "failed to process password"))
+			return
 		}
 		updates["u_pass"] = string(hashedPassword)
 		updates["u_token_valid_after"] = time.Now()
@@ -116,15 +93,17 @@ func (s *service) UpdateProfile(userID string, req *UpdateUserRequest) error {
 	}
 
 	if len(updates) == 0 {
-		return errors.New("NO_UPDATES", "no fields to update")
+		response.FromError(c, errors.New("NO_UPDATES", "no fields to update"))
+		return
 	}
 
-	if err := s.repo.Update(userID, updates); err != nil {
-		return err
+	if err := h.deps.repo.Update(userID, updates); err != nil {
+		response.FromError(c, err)
+		return
 	}
 
 	logger.Info("profile updated: %s", userID)
-	return nil
+	response.Success(c, gin.H{"message": "프로필이 수정되었습니다"})
 }
 
 func currentUserID(c *gin.Context) (string, bool) {

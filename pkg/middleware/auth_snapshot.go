@@ -6,7 +6,6 @@ import (
 	"gin_starter/pkg/db/database"
 	appErrors "gin_starter/pkg/errors"
 	"gin_starter/pkg/utils"
-	"strings"
 	"time"
 )
 
@@ -88,7 +87,7 @@ func loadAuthSnapshotFromDB(userID string) (*authSnapshot, error) {
 
 	rows, err := db.Query(`SELECT permission_code FROM _a_user_permissions WHERE u_id = ?`, userID)
 	if err != nil {
-		if isMissingTableError(err) {
+		if database.IsMissingTableError(err) {
 			return &snapshot, nil
 		}
 		return nil, err
@@ -119,7 +118,7 @@ func loadLevelPolicyEnabledFromDB(db *database.DB) (bool, error) {
 	var raw sql.NullString
 	err := db.QueryRow(`SELECT setting_value FROM _a_system_settings WHERE setting_key = 'level_policy_enabled' LIMIT 1`).Scan(&raw)
 	if err != nil {
-		if err == sql.ErrNoRows || isMissingTableError(err) {
+		if err == sql.ErrNoRows || database.IsMissingTableError(err) {
 			return true, nil
 		}
 		return false, err
@@ -134,12 +133,4 @@ func loadLevelPolicyEnabledFromDB(db *database.DB) (bool, error) {
 	default:
 		return true, nil
 	}
-}
-
-func isMissingTableError(err error) bool {
-	if err == nil {
-		return false
-	}
-	msg := utils.TrimLower(err.Error())
-	return strings.Contains(msg, "doesn't exist") || strings.Contains(msg, "no such table")
 }

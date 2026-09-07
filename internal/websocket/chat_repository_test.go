@@ -47,7 +47,7 @@ func TestEnsureDefaultAdminRoomReadsUsersBeforeUpsertingMembers(t *testing.T) {
 	}
 
 	mock.ExpectBegin()
-	mock.ExpectExec(regexp.QuoteMeta("UPDATE _chat_rooms SET")).
+	mock.ExpectExec(regexp.QuoteMeta("UPDATE `_chat_rooms` SET")).
 		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), AdminLoungeRoomKey).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectQuery(regexp.QuoteMeta(`

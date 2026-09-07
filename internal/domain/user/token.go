@@ -41,17 +41,129 @@ type RefreshTokenResponse struct {
 // @Success 200 {object} response.Response
 // @Router /api/user/refresh [post]
 func (h *Handler) RefreshToken(c *gin.Context) {
-	req, ok := readRefreshTokenRequest(c)
-	if !ok {
+	var req RefreshTokenRequest
+	if err := c.ShouldBindJSON(&req); err != nil && !stderrors.Is(err, io.EOF) {
+		response.BadRequest(c, "잘못된 요청 형식입니다")
 		return
 	}
 
-	tokens, err := h.service.RefreshToken(req)
+	if utils.EmptyString(strings.TrimSpace(req.RefreshToken)) {
+		if cookieToken, err := c.Cookie(middleware.RefreshTokenCookieName); err == nil {
+			req.RefreshToken = cookieToken
+		}
+	}
+
+	if utils.EmptyString(strings.TrimSpace(req.RefreshToken)) {
+		response.BadRequest(c, "리프레시 토큰이 필요합니다")
+		return
+	}
+
+	claims, err := middleware.ValidateToken(
+		req.RefreshToken,
+		h.deps.config.JWT.RefreshSecret,
+		h.deps.config.JWT.TokenSecret,
+		h.deps.config.JWT.Issuer,
+		h.deps.config.JWT.Audience,
+		h.deps.config.JWT.Subject,
+	)
 	if err != nil {
 		response.FromError(c, err)
 		return
 	}
 
+	user, err := h.deps.repo.FindByID(claims.UserID)
+	if err != nil {
+		response.FromError(c, err)
+		return
+	}
+
+	if utils.TrimLower(user.Status) == UserStatusLocked {
+		response.FromError(c, errors.ErrAccountLocked)
+		return
+	}
+
+	if user.TokenValidAfter != nil {
+		if claims.IssuedAt == nil || !claims.IssuedAt.Time.After(*user.TokenValidAfter) {
+			response.FromError(c, errors.ErrTokenStale)
+			return
+		}
+	}
+
+	levelPolicyEnabled, err := h.deps.repo.GetLevelPolicyEnabled()
+	if err != nil {
+		response.FromError(c, err)
+		return
+	}
+
+	if authz.NormalizeAuthType(user.AuthType) != authz.NormalizeAuthType(claims.UserType) {
+		response.FromError(c, errors.ErrTokenStale)
+		return
+	}
+	if levelPolicyEnabled && user.AuthLevel != claims.UserLevel {
+		response.FromError(c, errors.ErrTokenStale)
+		return
+	}
+
+	matched, legacyToken := isRefreshTokenMatch(user.RefreshToken, req.RefreshToken)
+	if !matched {
+		logger.Warn("invalid refresh token: %s", claims.UserID)
+		response.FromError(c, errors.ErrInvalidToken)
+		return
+	}
+
+	if legacyToken {
+		if err := h.deps.repo.UpdateRefreshToken(user.ID, hashRefreshToken(req.RefreshToken)); err != nil {
+			response.FromError(c, err)
+			return
+		}
+	}
+
+	accessToken, err := middleware.GenerateToken(
+		user.ID,
+		user.AuthType,
+		user.AuthLevel,
+		h.deps.config.JWT.AccessExpireMin,
+		h.deps.config.JWT.AccessSecret,
+		h.deps.config.JWT.TokenSecret,
+		h.deps.config.JWT.Issuer,
+		h.deps.config.JWT.Audience,
+		h.deps.config.JWT.Subject,
+	)
+	if err != nil {
+		response.FromError(c, errors.Wrap(err, "TOKEN_GENERATION_FAILED", "failed to generate token"))
+		return
+	}
+
+	newRefreshToken := req.RefreshToken
+	if claims.ExpiresAt != nil && time.Until(claims.ExpiresAt.Time) < time.Duration(h.deps.config.JWT.RefreshReuseHours)*time.Hour {
+		newRefreshToken, err = middleware.GenerateToken(
+			user.ID,
+			user.AuthType,
+			user.AuthLevel,
+			h.deps.config.JWT.RefreshExpireDays*24*60,
+			h.deps.config.JWT.RefreshSecret,
+			h.deps.config.JWT.TokenSecret,
+			h.deps.config.JWT.Issuer,
+			h.deps.config.JWT.Audience,
+			h.deps.config.JWT.Subject,
+		)
+		if err != nil {
+			response.FromError(c, errors.Wrap(err, "TOKEN_GENERATION_FAILED", "failed to generate token"))
+			return
+		}
+
+		if err := h.deps.repo.UpdateRefreshToken(user.ID, hashRefreshToken(newRefreshToken)); err != nil {
+			response.FromError(c, err)
+			return
+		}
+	}
+
+	logger.Info("token refreshed: %s", user.ID)
+
+	tokens := &RefreshTokenResponse{
+		AccessToken:  accessToken,
+		RefreshToken: newRefreshToken,
+	}
 	h.setAuthCookies(c, tokens.AccessToken, tokens.RefreshToken)
 	response.Success(c, tokens)
 }
@@ -69,144 +181,18 @@ func (h *Handler) Logout(c *gin.Context) {
 		return
 	}
 
-	if err := h.service.Logout(userID); err != nil {
-		response.FromError(c, err)
-		return
-	}
-
-	h.clearAuthCookies(c)
-	response.Success(c, gin.H{"message": "로그아웃되었습니다"})
-}
-
-func readRefreshTokenRequest(c *gin.Context) (*RefreshTokenRequest, bool) {
-	var req RefreshTokenRequest
-	if err := c.ShouldBindJSON(&req); err != nil && !stderrors.Is(err, io.EOF) {
-		response.BadRequest(c, "잘못된 요청 형식입니다")
-		return nil, false
-	}
-
-	if utils.EmptyString(strings.TrimSpace(req.RefreshToken)) {
-		if cookieToken, err := c.Cookie(middleware.RefreshTokenCookieName); err == nil {
-			req.RefreshToken = cookieToken
-		}
-	}
-
-	if utils.EmptyString(strings.TrimSpace(req.RefreshToken)) {
-		response.BadRequest(c, "리프레시 토큰이 필요합니다")
-		return nil, false
-	}
-
-	return &req, true
-}
-
-func (s *service) RefreshToken(req *RefreshTokenRequest) (*RefreshTokenResponse, error) {
-	claims, err := middleware.ValidateToken(
-		req.RefreshToken,
-		s.config.JWT.RefreshSecret,
-		s.config.JWT.TokenSecret,
-		s.config.JWT.Issuer,
-		s.config.JWT.Audience,
-		s.config.JWT.Subject,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	user, err := s.repo.FindByID(claims.UserID)
-	if err != nil {
-		return nil, err
-	}
-
-	if utils.TrimLower(user.Status) == UserStatusLocked {
-		return nil, errors.ErrAccountLocked
-	}
-
-	if user.TokenValidAfter != nil {
-		if claims.IssuedAt == nil || !claims.IssuedAt.Time.After(*user.TokenValidAfter) {
-			return nil, errors.ErrTokenStale
-		}
-	}
-
-	levelPolicyEnabled, err := s.repo.GetLevelPolicyEnabled()
-	if err != nil {
-		return nil, err
-	}
-
-	if authz.NormalizeAuthType(user.AuthType) != authz.NormalizeAuthType(claims.UserType) {
-		return nil, errors.ErrTokenStale
-	}
-	if levelPolicyEnabled && user.AuthLevel != claims.UserLevel {
-		return nil, errors.ErrTokenStale
-	}
-
-	matched, legacyToken := isRefreshTokenMatch(user.RefreshToken, req.RefreshToken)
-	if !matched {
-		logger.Warn("invalid refresh token: %s", claims.UserID)
-		return nil, errors.ErrInvalidToken
-	}
-
-	if legacyToken {
-		if err := s.repo.UpdateRefreshToken(user.ID, hashRefreshToken(req.RefreshToken)); err != nil {
-			return nil, err
-		}
-	}
-
-	accessToken, err := middleware.GenerateToken(
-		user.ID,
-		user.AuthType,
-		user.AuthLevel,
-		s.config.JWT.AccessExpireMin,
-		s.config.JWT.AccessSecret,
-		s.config.JWT.TokenSecret,
-		s.config.JWT.Issuer,
-		s.config.JWT.Audience,
-		s.config.JWT.Subject,
-	)
-	if err != nil {
-		return nil, errors.Wrap(err, "TOKEN_GENERATION_FAILED", "failed to generate token")
-	}
-
-	newRefreshToken := req.RefreshToken
-	if claims.ExpiresAt != nil && time.Until(claims.ExpiresAt.Time) < time.Duration(s.config.JWT.RefreshReuseHours)*time.Hour {
-		newRefreshToken, err = middleware.GenerateToken(
-			user.ID,
-			user.AuthType,
-			user.AuthLevel,
-			s.config.JWT.RefreshExpireDays*24*60,
-			s.config.JWT.RefreshSecret,
-			s.config.JWT.TokenSecret,
-			s.config.JWT.Issuer,
-			s.config.JWT.Audience,
-			s.config.JWT.Subject,
-		)
-		if err != nil {
-			return nil, errors.Wrap(err, "TOKEN_GENERATION_FAILED", "failed to generate token")
-		}
-
-		if err := s.repo.UpdateRefreshToken(user.ID, hashRefreshToken(newRefreshToken)); err != nil {
-			return nil, err
-		}
-	}
-
-	logger.Info("token refreshed: %s", user.ID)
-
-	return &RefreshTokenResponse{
-		AccessToken:  accessToken,
-		RefreshToken: newRefreshToken,
-	}, nil
-}
-
-func (s *service) Logout(userID string) error {
 	updates := map[string]interface{}{
 		"u_re_token":          "",
 		"u_token_valid_after": time.Now(),
 	}
-	if err := s.repo.Update(userID, updates); err != nil {
-		return err
+	if err := h.deps.repo.Update(userID, updates); err != nil {
+		response.FromError(c, err)
+		return
 	}
 
 	logger.Info("logout completed: %s", userID)
-	return nil
+	h.clearAuthCookies(c)
+	response.Success(c, gin.H{"message": "로그아웃되었습니다"})
 }
 
 func (h *Handler) setAuthCookies(c *gin.Context, accessToken, refreshToken string) {

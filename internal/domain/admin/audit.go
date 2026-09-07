@@ -66,15 +66,49 @@ func (h *Handler) GetAuditLogs(c *gin.Context) {
 		return strings.TrimSpace(c.Query(key))
 	}
 
-	result, err := h.service.GetAuditLogs(
-		pagination.Page,
-		pagination.Limit,
-		trimQuery("action"),
-		trimQuery("actor_id"),
-		trimQuery("target_user_id"),
-		trimQuery("date_from"),
-		trimQuery("date_to"),
-	)
+	req := &AdminAuditLogListRequest{
+		Page:         pagination.Page,
+		Limit:        pagination.Limit,
+		Action:       trimQuery("action"),
+		ActorID:      trimQuery("actor_id"),
+		TargetUserID: trimQuery("target_user_id"),
+		DateFrom:     trimQuery("date_from"),
+		DateTo:       trimQuery("date_to"),
+	}
+
+	var parsedFrom time.Time
+	var parsedTo time.Time
+	var hasFrom bool
+	var hasTo bool
+
+	if utils.HasText(req.DateFrom) {
+		t, err := time.Parse("2006-01-02", req.DateFrom)
+		if err != nil {
+			response.FromError(c, errors.New("BAD_REQUEST", "date_from must be YYYY-MM-DD"))
+			return
+		}
+		parsedFrom = t
+		hasFrom = true
+		req.DateFrom = t.Format("2006-01-02")
+	}
+
+	if utils.HasText(req.DateTo) {
+		t, err := time.Parse("2006-01-02", req.DateTo)
+		if err != nil {
+			response.FromError(c, errors.New("BAD_REQUEST", "date_to must be YYYY-MM-DD"))
+			return
+		}
+		parsedTo = t
+		hasTo = true
+		req.DateTo = t.AddDate(0, 0, 1).Format("2006-01-02")
+	}
+
+	if hasFrom && hasTo && parsedFrom.After(parsedTo) {
+		response.FromError(c, errors.New("BAD_REQUEST", "date_from must be before or equal to date_to"))
+		return
+	}
+
+	result, err := h.deps.permissionRepo.ListAuditLogs(req)
 	if err != nil {
 		response.FromError(c, err)
 		return
@@ -83,7 +117,7 @@ func (h *Handler) GetAuditLogs(c *gin.Context) {
 	response.Success(c, result)
 }
 
-func (s *service) GetAuditLogs(page, limit int, action, actorID, targetID, dateFrom, dateTo string) (*AdminAuditLogListResponse, error) {
+func (d *deps) GetAuditLogs(page, limit int, action, actorID, targetID, dateFrom, dateTo string) (*AdminAuditLogListResponse, error) {
 	req := &AdminAuditLogListRequest{
 		Page:         page,
 		Limit:        limit,
@@ -124,11 +158,11 @@ func (s *service) GetAuditLogs(page, limit int, action, actorID, targetID, dateF
 		return nil, errors.New("BAD_REQUEST", "date_from must be before or equal to date_to")
 	}
 
-	return s.permissionRepo.ListAuditLogs(req)
+	return d.permissionRepo.ListAuditLogs(req)
 }
 
-func (s *service) denyWithAudit(actor Actor, targetID, action, message string) error {
-	err := s.permissionRepo.WriteAuditLog(&AuditLogEntry{
+func (d *deps) denyWithAudit(actor Actor, targetID, action, message string) error {
+	err := d.permissionRepo.WriteAuditLog(&AuditLogEntry{
 		ActorID:  actor.ID,
 		TargetID: targetID,
 		Action:   action,

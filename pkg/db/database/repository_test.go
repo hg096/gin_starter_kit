@@ -16,7 +16,7 @@ func TestCount_AllRows_WhenWhereEmpty(t *testing.T) {
 
 	repo := NewRepository(&DB{DB: sqlDB})
 
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT COUNT(*) FROM _blog")).
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT COUNT(*) FROM `_blog`")).
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(5))
 
 	count, err := repo.Count("_blog", "")
@@ -101,13 +101,13 @@ func TestRepositoryWithTxUsesSameMethodNames(t *testing.T) {
 	repo := NewRepository(&DB{DB: sqlDB})
 
 	mock.ExpectBegin()
-	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO _user")).
+	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO `_user`")).
 		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg()).
 		WillReturnResult(sqlmock.NewResult(7, 1))
-	mock.ExpectExec(regexp.QuoteMeta("UPDATE _user SET")).
+	mock.ExpectExec(regexp.QuoteMeta("UPDATE `_user` SET")).
 		WithArgs(sqlmock.AnyArg(), "u1").
 		WillReturnResult(sqlmock.NewResult(0, 1))
-	mock.ExpectExec(regexp.QuoteMeta("DELETE FROM _user WHERE u_id = ?")).
+	mock.ExpectExec(regexp.QuoteMeta("DELETE FROM `_user` WHERE u_id = ?")).
 		WithArgs("u1").
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
