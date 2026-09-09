@@ -45,13 +45,11 @@ func NewDeps(repo Repository, cfg *config.Config) *deps {
 // Handler handles user HTTP endpoints.
 type Handler struct {
 	deps *deps
-	cfg  *config.Config
 }
 
-func NewHandler(deps *deps, cfg *config.Config) *Handler {
+func NewHandler(deps *deps) *Handler {
 	return &Handler{
 		deps: deps,
-		cfg:  cfg,
 	}
 }
 

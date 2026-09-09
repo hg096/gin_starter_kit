@@ -2,6 +2,7 @@ package admin
 
 import (
 	"database/sql"
+	stderrors "errors"
 	"gin_starter/internal/domain/blog"
 	"gin_starter/pkg/errors"
 	"gin_starter/pkg/response"
@@ -187,7 +188,11 @@ func (h *Handler) UpdateBlog(c *gin.Context) {
 
 	current, err := h.deps.blogRepo.FindByID(id)
 	if err != nil || current == nil {
-		response.FromError(c, errors.New("BLOG_NOT_FOUND", "blog not found"))
+		if err == nil || stderrors.Is(err, sql.ErrNoRows) {
+			response.NotFound(c, "blog not found")
+		} else {
+			response.FromError(c, errors.Wrap(err, "DATABASE_ERROR", "failed to query blog"))
+		}
 		return
 	}
 
@@ -240,7 +245,11 @@ func (h *Handler) UpdateBlog(c *gin.Context) {
 
 	updated, err := h.deps.blogRepo.FindByID(id)
 	if err != nil || updated == nil {
-		response.FromError(c, errors.New("BLOG_NOT_FOUND", "blog not found"))
+		if err == nil || stderrors.Is(err, sql.ErrNoRows) {
+			response.NotFound(c, "blog not found")
+		} else {
+			response.FromError(c, errors.Wrap(err, "DATABASE_ERROR", "failed to query blog"))
+		}
 		return
 	}
 
@@ -281,7 +290,11 @@ func (h *Handler) DeleteBlog(c *gin.Context) {
 
 	current, err := h.deps.blogRepo.FindByID(id)
 	if err != nil || current == nil {
-		response.FromError(c, errors.New("BLOG_NOT_FOUND", "blog not found"))
+		if err == nil || stderrors.Is(err, sql.ErrNoRows) {
+			response.NotFound(c, "blog not found")
+		} else {
+			response.FromError(c, errors.Wrap(err, "DATABASE_ERROR", "failed to query blog"))
+		}
 		return
 	}
 

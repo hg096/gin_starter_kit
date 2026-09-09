@@ -31,7 +31,7 @@ type CreateUserRequest struct {
 func (h *Handler) Register(c *gin.Context) {
 	result := validator.Validate(c, []validator.Rule{
 		{Field: "user_id", Label: "아이디", Required: true, MinLen: 3, MaxLen: 20, Pattern: validator.PatternAlphaNum},
-		{Field: "user_pass", Label: "비밀번호", Required: true, MinLen: 6, MaxLen: 50},
+		{Field: "user_pass", Label: "비밀번호", Required: true, MinLen: 6, MaxLen: 50, MaxBytes: 50},
 		{Field: "user_name", Label: "이름", Required: true, MinLen: 2, MaxLen: 50, Pattern: validator.PatternKorEng},
 		{Field: "user_email", Label: "이메일", Required: true, Pattern: validator.PatternEmail},
 	})

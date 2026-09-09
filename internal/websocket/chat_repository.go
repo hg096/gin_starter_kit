@@ -814,15 +814,7 @@ func (r *chatRepository) runTxWithRetry(fn func(tx *sql.Tx) error) error {
 		commitErr := database.CommitTx(tx)
 		if commitErr != nil {
 			wrapped := appErrors.Wrap(commitErr, "DATABASE_ERROR", "failed to commit transaction")
-			if isRetryableDBConnError(commitErr) && attempt < maxAttempts {
-				logger.Warn("retrying chat transaction after commit failure: attempt=%d err=%v", attempt, commitErr)
-				if pingErr := r.db.Ping(); pingErr != nil {
-					logger.Warn("db ping failed during retry recovery (commit): %v", pingErr)
-				}
-				time.Sleep(50 * time.Millisecond)
-				lastErr = wrapped
-				continue
-			}
+			// A lost commit response does not prove rollback; replay could duplicate messages.
 			return wrapped
 		}
 

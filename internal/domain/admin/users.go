@@ -469,52 +469,6 @@ func (h *Handler) GetStats(c *gin.Context) {
 	response.Success(c, stats)
 }
 
-func (d *deps) GetAllUsers(page, limit int, userType string) (*AdminUserListResponse, error) {
-	pagination := utils.NewPagination(page, limit, 20, 100)
-
-	query, countQuery, args := buildUserListQueries(userType)
-	query += " ORDER BY u_regi_date DESC LIMIT ? OFFSET ?"
-
-	var total int64
-	err := d.db.DB.QueryRow(countQuery, args...).Scan(&total)
-	if err != nil {
-		logger.Error("failed to query user count: %v", err)
-		return nil, errors.Wrap(err, "DATABASE_ERROR", "failed to query user count")
-	}
-
-	queryArgs := append(args, pagination.Limit, pagination.Offset)
-	rows, err := d.db.DB.Query(query, queryArgs...)
-	if err != nil {
-		logger.Error("failed to query users: %v", err)
-		return nil, errors.Wrap(err, "DATABASE_ERROR", "failed to query users")
-	}
-	defer rows.Close()
-
-	users := make([]user.User, 0, pagination.Limit)
-	for rows.Next() {
-		var u user.User
-		if err := rows.Scan(&u.ID, &u.Name, &u.Email, &u.AuthType, &u.AuthLevel, &u.Status, &u.CreatedAt); err != nil {
-			return nil, errors.Wrap(err, "DATABASE_ERROR", "failed to map users")
-		}
-		u.AuthType = authz.NormalizeAuthType(u.AuthType)
-		users = append(users, u)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, errors.Wrap(err, "DATABASE_ERROR", "failed to iterate users")
-	}
-
-	return &AdminUserListResponse{
-		Users: users,
-		Total: total,
-		Page:  pagination.Page,
-		Limit: pagination.Limit,
-	}, nil
-}
-
-func (d *deps) GetUserByID(id string) (*user.User, error) {
-	return d.userRepo.FindByID(id)
-}
-
 func (d *deps) UpdateUserAuth(actor Actor, id string, authType string, authLevel int) error {
 	target, err := d.userRepo.FindByID(id)
 	if err != nil {
@@ -719,13 +673,6 @@ func (d *deps) ResetUserPassword(actor Actor, id string, newPassword string) err
 	})
 }
 
-func (d *deps) GetUserPermissions(id string) ([]string, error) {
-	if _, err := d.userRepo.FindByID(id); err != nil {
-		return nil, errors.New("USER_NOT_FOUND", "user not found")
-	}
-	return d.permissionRepo.ListUserPermissions(id)
-}
-
 func (d *deps) UpdateUserPermissions(actor Actor, id string, permissionCodes []string) error {
 	target, err := d.userRepo.FindByID(id)
 	if err != nil {
@@ -838,32 +785,6 @@ func (d *deps) DeleteUser(actor Actor, id string) error {
 			},
 		})
 	})
-}
-
-func (d *deps) GetStats() (*AdminStatsResponse, error) {
-	stats := &AdminStatsResponse{}
-
-	err := d.db.DB.QueryRow("SELECT COUNT(*) FROM _user").Scan(&stats.TotalUsers)
-	if err != nil {
-		return nil, errors.Wrap(err, "DATABASE_ERROR", "failed to query total users")
-	}
-
-	err = d.db.DB.QueryRow("SELECT COUNT(*) FROM _user WHERE u_auth_type IN ('TA', 'A', 'M', 'G', 'AG')").Scan(&stats.AdminUsers)
-	if err != nil {
-		return nil, errors.Wrap(err, "DATABASE_ERROR", "failed to query admin users")
-	}
-
-	err = d.db.DB.QueryRow("SELECT COUNT(*) FROM _user WHERE u_auth_type = 'U'").Scan(&stats.NormalUsers)
-	if err != nil {
-		return nil, errors.Wrap(err, "DATABASE_ERROR", "failed to query normal users")
-	}
-
-	err = d.db.DB.QueryRow("SELECT COUNT(*) FROM _blog").Scan(&stats.TotalBlogs)
-	if err != nil {
-		stats.TotalBlogs = 0
-	}
-
-	return stats, nil
 }
 
 func buildUserListQueries(userType string) (query string, countQuery string, args []interface{}) {

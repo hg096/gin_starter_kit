@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
 )
@@ -13,6 +14,7 @@ import (
 type Rule struct {
 	Field    string          // 필드명
 	Label    string          // 사용자에게 표시할 이름
+	MaxBytes int             // Optional byte limit, for passwords and storage constraints.
 	Required bool            // 필수 여부
 	MinLen   int             // 최소 길이
 	MaxLen   int             // 최대 길이
@@ -41,17 +43,17 @@ type Result struct {
 
 // 미리 정의된 패턴들
 var (
-	PatternNumber      = regexp.MustCompile(`^[0-9]+$`)
-	PatternDecimal     = regexp.MustCompile(`^[0-9.]+$`)
-	PatternEnglish     = regexp.MustCompile(`^[a-zA-Z\s]+$`)
-	PatternKorean      = regexp.MustCompile(`^[가-힣ㄱ-ㅎㅏ-ㅣ\s]+$`)
-	PatternKorEng      = regexp.MustCompile(`^[가-힣ㄱ-ㅎㅏ-ㅣa-zA-Z\s]+$`)
-	PatternKorEngNum   = regexp.MustCompile(`^[가-힣ㄱ-ㅎㅏ-ㅣa-zA-Z0-9\s]+$`)
-	PatternEmail       = regexp.MustCompile(`^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$`)
-	PatternAlphaNum    = regexp.MustCompile(`^[a-zA-Z0-9]+$`)
-	PatternSlug        = regexp.MustCompile(`^[a-z0-9\-]+$`)
-	PatternURL         = regexp.MustCompile(`^https?://[^\s]+$`)
-	PatternPhone       = regexp.MustCompile(`^[0-9\-+\s()]+$`)
+	PatternNumber    = regexp.MustCompile(`^[0-9]+$`)
+	PatternDecimal   = regexp.MustCompile(`^[0-9.]+$`)
+	PatternEnglish   = regexp.MustCompile(`^[a-zA-Z\s]+$`)
+	PatternKorean    = regexp.MustCompile(`^[가-힣ㄱ-ㅎㅏ-ㅣ\s]+$`)
+	PatternKorEng    = regexp.MustCompile(`^[가-힣ㄱ-ㅎㅏ-ㅣa-zA-Z\s]+$`)
+	PatternKorEngNum = regexp.MustCompile(`^[가-힣ㄱ-ㅎㅏ-ㅣa-zA-Z0-9\s]+$`)
+	PatternEmail     = regexp.MustCompile(`^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$`)
+	PatternAlphaNum  = regexp.MustCompile(`^[a-zA-Z0-9]+$`)
+	PatternSlug      = regexp.MustCompile(`^[a-z0-9\-]+$`)
+	PatternURL       = regexp.MustCompile(`^https?://[^\s]+$`)
+	PatternPhone     = regexp.MustCompile(`^[0-9\-+\s()]+$`)
 )
 
 // Validate 검증 실행
@@ -63,7 +65,11 @@ func Validate(c *gin.Context, rules []Rule) *Result {
 	}
 
 	for _, rule := range rules {
-		value := extractValue(c, rule.Field)
+		value, err := extractValue(c, rule.Field)
+		if err != nil {
+			result.addError(rule.Field, rule.Label, "INVALID_TYPE", err.Error())
+			continue
+		}
 		value = strings.TrimSpace(value)
 
 		// 필수 체크
@@ -78,14 +84,19 @@ func Validate(c *gin.Context, rules []Rule) *Result {
 			continue
 		}
 
+		if rule.MaxBytes > 0 && len(value) > rule.MaxBytes {
+			result.addError(rule.Field, rule.Label, "MAX_BYTES", fmt.Sprintf("%s은(는) 최대 %d바이트 이하여야 합니다", rule.Label, rule.MaxBytes))
+			continue
+		}
+
 		// 길이 검증
-		if rule.MinLen > 0 && len(value) < rule.MinLen {
+		if rule.MinLen > 0 && utf8.RuneCountInString(value) < rule.MinLen {
 			result.addError(rule.Field, rule.Label, "MIN_LENGTH",
 				fmt.Sprintf("%s은(는) 최소 %d자 이상이어야 합니다", rule.Label, rule.MinLen))
 			continue
 		}
 
-		if rule.MaxLen > 0 && len(value) > rule.MaxLen {
+		if rule.MaxLen > 0 && utf8.RuneCountInString(value) > rule.MaxLen {
 			result.addError(rule.Field, rule.Label, "MAX_LENGTH",
 				fmt.Sprintf("%s은(는) 최대 %d자 이하여야 합니다", rule.Label, rule.MaxLen))
 			continue
@@ -139,42 +150,35 @@ func (r *Result) addError(field, label, code, message string) {
 }
 
 // extractValue gin.Context에서 값 추출 (JSON, Form, Query 순서)
-func extractValue(c *gin.Context, field string) string {
-	// JSON 바디 확인
+func extractValue(c *gin.Context, field string) (string, error) {
 	if c.ContentType() == "application/json" {
-		if val, exists := c.Get("_jsonBody"); exists {
-			if body, ok := val.(map[string]interface{}); ok {
-				if v, ok := body[field]; ok {
-					return fmt.Sprint(v)
-				}
+		cached, exists := c.Get("_validatorJSON")
+		if !exists {
+			var body map[string]interface{}
+			if err := c.ShouldBindJSON(&body); err != nil || body == nil {
+				return "", fmt.Errorf("잘못된 JSON 요청입니다")
 			}
+			cached = body
+			c.Set("_validatorJSON", body)
 		}
-		// JSON 바디가 캐시되지 않았다면 캐시
-		var jsonBody map[string]interface{}
-		if err := c.ShouldBindJSON(&jsonBody); err == nil {
-			c.Set("_jsonBody", jsonBody)
-			if v, ok := jsonBody[field]; ok {
-				return fmt.Sprint(v)
-			}
+		body := cached.(map[string]interface{})
+		v, exists := body[field]
+		if !exists || v == nil {
+			return "", nil
 		}
+		value, ok := v.(string)
+		if !ok {
+			return "", fmt.Errorf("%s은(는) 문자열이어야 합니다", field)
+		}
+		return value, nil
 	}
-
-	// Form 데이터
 	if v := c.PostForm(field); v != "" {
-		return v
+		return v, nil
 	}
-
-	// Query 파라미터
 	if v := c.Query(field); v != "" {
-		return v
+		return v, nil
 	}
-
-	// URL 파라미터
-	if v := c.Param(field); v != "" {
-		return v
-	}
-
-	return ""
+	return c.Param(field), nil
 }
 
 // GetErrorMap 에러를 map으로 변환

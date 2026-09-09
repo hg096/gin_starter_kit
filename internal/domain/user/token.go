@@ -196,16 +196,16 @@ func (h *Handler) Logout(c *gin.Context) {
 }
 
 func (h *Handler) setAuthCookies(c *gin.Context, accessToken, refreshToken string) {
-	secure := h.cfg != nil && h.cfg.IsProduction()
+	secure := h.deps.config != nil && h.deps.config.IsProduction()
 	accessMaxAge := 30 * 60
 	refreshMaxAge := 7 * 24 * 60 * 60
 
-	if h.cfg != nil {
-		if h.cfg.JWT.AccessExpireMin > 0 {
-			accessMaxAge = h.cfg.JWT.AccessExpireMin * 60
+	if h.deps.config != nil {
+		if h.deps.config.JWT.AccessExpireMin > 0 {
+			accessMaxAge = h.deps.config.JWT.AccessExpireMin * 60
 		}
-		if h.cfg.JWT.RefreshExpireDays > 0 {
-			refreshMaxAge = h.cfg.JWT.RefreshExpireDays * 24 * 60 * 60
+		if h.deps.config.JWT.RefreshExpireDays > 0 {
+			refreshMaxAge = h.deps.config.JWT.RefreshExpireDays * 24 * 60 * 60
 		}
 	}
 
@@ -215,7 +215,7 @@ func (h *Handler) setAuthCookies(c *gin.Context, accessToken, refreshToken strin
 }
 
 func (h *Handler) clearAuthCookies(c *gin.Context) {
-	secure := h.cfg != nil && h.cfg.IsProduction()
+	secure := h.deps.config != nil && h.deps.config.IsProduction()
 
 	c.SetSameSite(http.SameSiteLaxMode)
 	c.SetCookie(middleware.AccessTokenCookieName, "", -1, "/", "", secure, true)

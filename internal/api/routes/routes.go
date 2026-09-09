@@ -47,7 +47,7 @@ func SetupRoutes(r *gin.Engine, db *database.DB, cfg *config.Config) {
 func setupUserRoutes(rg *gin.RouterGroup, db *database.DB, cfg *config.Config) {
 	repo := user.NewRepository(db)
 	deps := user.NewDeps(repo, cfg)
-	handler := user.NewHandler(deps, cfg)
+	handler := user.NewHandler(deps)
 
 	userGroup := rg.Group("/user")
 	{

@@ -1,31 +1,29 @@
-PORT="서버포트"
+# 로컬 개발용 예시. DB 접속 정보는 실제 환경에 맞게 변경합니다.
+PORT=8080
+GIN_MODE=debug
+SERVICE_NAME=GinStarter
 
-DB_PORT="디비포트"
-DB_HOST="디비아이피"
-DB_USER="사용자"
-DB_PASS="암호"
-DB_NAME="디비명"
-# debug, release, test
-GIN_MODE="debug"
+DB_HOST=localhost
+DB_PORT=3306
+DB_USER=root
+DB_PASS=
+DB_NAME=gin_starter
+DB_MAX_OPEN_CONNS=25
+DB_MAX_IDLE_CONNS=5
+# 연결 최대 수명(분)
+DB_CONN_MAX_LIFETIME=5
 
-SERVICE_NAME="서비스명"
-
-# 토큰 서명에 사용할 비밀 키 32자
-# 엑세스
-JWT_SECRET="엑세스"
-# 리프레시
-JWT_REFRESH_SECRET="리프레시"
-# 토큰 내용 암호화
-JWT_TOKEN_SECRET="토큰내용암호화"
-# 엑세스 토큰 만료 시간(분)
-JWT_EXPIRES_IN="30"
-# 리프레시 토큰 만료 시간(일)
-JWT_EXPIRES_RE="1"
-
-# Comma-separated list for CORS allow-list
-CORS_ALLOWED_ORIGINS="http://localhost:8080,http://127.0.0.1:8080,http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173"
-
-# JWT registered-claims validation
+# 공개된 로컬 개발 전용 키입니다. 배포 시 각각 다른 임의 키로 교체합니다.
+# 각 키는 정확히 32바이트(ASCII 32자)여야 합니다.
+JWT_SECRET=0123456789abcdef0123456789abcdef
+JWT_REFRESH_SECRET=abcdef0123456789abcdef0123456789
+JWT_TOKEN_SECRET=89abcdef0123456789abcdef01234567
 JWT_ISSUER=GinStarter
 JWT_AUDIENCE=gin-starter-client
 JWT_SUBJECT=access
+# 액세스 토큰 만료 시간(분), 리프레시 토큰 만료 시간(일)
+JWT_EXPIRES_IN=30
+JWT_EXPIRES_RE=7
+
+# 쉼표로 구분한 허용 출처 목록
+CORS_ALLOWED_ORIGINS=http://localhost:8080,http://127.0.0.1:8080,http://localhost:5173

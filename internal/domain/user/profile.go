@@ -59,7 +59,7 @@ func (h *Handler) UpdateProfile(c *gin.Context) {
 	result := validator.Validate(c, []validator.Rule{
 		{Field: "user_name", Label: "이름", MinLen: 2, MaxLen: 50, Pattern: validator.PatternKorEng},
 		{Field: "user_email", Label: "이메일", Pattern: validator.PatternEmail},
-		{Field: "user_pass", Label: "비밀번호", MinLen: 6, MaxLen: 50},
+		{Field: "user_pass", Label: "비밀번호", MinLen: 6, MaxLen: 50, MaxBytes: 50},
 	})
 	if !result.Valid {
 		response.ValidationError(c, result.GetErrorMap())

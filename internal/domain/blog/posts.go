@@ -1,6 +1,8 @@
 package blog
 
 import (
+	"database/sql"
+	stderrors "errors"
 	"gin_starter/pkg/errors"
 	"gin_starter/pkg/logger"
 	"gin_starter/pkg/response"
@@ -95,7 +97,11 @@ func (h *Handler) Get(c *gin.Context) {
 
 	blog, err := h.deps.repo.FindByID(id)
 	if err != nil {
-		response.FromError(c, errors.New("BLOG_NOT_FOUND", "블로그를 찾을 수 없습니다"))
+		if stderrors.Is(err, sql.ErrNoRows) {
+			response.NotFound(c, "블로그를 찾을 수 없습니다")
+		} else {
+			response.FromError(c, errors.Wrap(err, "DATABASE_ERROR", "블로그 조회에 실패했습니다"))
+		}
 		return
 	}
 
@@ -208,7 +214,11 @@ func (h *Handler) Update(c *gin.Context) {
 
 	blog, err := h.deps.repo.FindByID(id)
 	if err != nil {
-		response.FromError(c, errors.New("BLOG_NOT_FOUND", "블로그를 찾을 수 없습니다"))
+		if stderrors.Is(err, sql.ErrNoRows) {
+			response.NotFound(c, "블로그를 찾을 수 없습니다")
+		} else {
+			response.FromError(c, errors.Wrap(err, "DATABASE_ERROR", "블로그 조회에 실패했습니다"))
+		}
 		return
 	}
 	if blog.AuthorID != userID {
@@ -273,7 +283,11 @@ func (h *Handler) Delete(c *gin.Context) {
 
 	blog, err := h.deps.repo.FindByID(id)
 	if err != nil {
-		response.FromError(c, errors.New("BLOG_NOT_FOUND", "블로그를 찾을 수 없습니다"))
+		if stderrors.Is(err, sql.ErrNoRows) {
+			response.NotFound(c, "블로그를 찾을 수 없습니다")
+		} else {
+			response.FromError(c, errors.Wrap(err, "DATABASE_ERROR", "블로그 조회에 실패했습니다"))
+		}
 		return
 	}
 	if blog.AuthorID != userID {

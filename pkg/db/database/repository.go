@@ -278,7 +278,10 @@ func (r *Repository) execTx(tx *sql.Tx, location string, query string, args ...i
 }
 
 func validateDMLQuery(query string) error {
-	normalized := normalizeSQLForValidation(query)
+	normalized, err := sqlValidationTokens(query)
+	if err != nil {
+		return err
+	}
 	if normalized == "" {
 		return errors.New("INVALID_QUERY", "빈 쿼리는 실행할 수 없습니다")
 	}
@@ -306,7 +309,10 @@ func validateDMLQuery(query string) error {
 }
 
 func validateSchemaQuery(query string) error {
-	normalized := normalizeSQLForValidation(query)
+	normalized, err := sqlValidationTokens(query)
+	if err != nil {
+		return err
+	}
 	if normalized == "" {
 		return errors.New("INVALID_QUERY", "빈 쿼리는 실행할 수 없습니다")
 	}
@@ -668,4 +674,58 @@ func (r *Repository) LogError(location string, message string, sqlQuery string) 
 			logger.Error("에러 로그 저장 실패 [%s]: %v", location, err)
 		}
 	}()
+}
+
+// sqlValidationTokens keeps only top-level SQL tokens. Comments are rejected
+// conservatively, including MySQL executable comments.
+func sqlValidationTokens(query string) (string, error) {
+	var out strings.Builder
+	depth := 0
+	quote := byte(0)
+	for i := 0; i < len(query); i++ {
+		ch := query[i]
+		if quote != 0 {
+			if ch == '\\' {
+				return "", errors.New("INVALID_QUERY", "SQL literals with backslashes are not supported; use parameters")
+			}
+			if ch == quote {
+				if i+1 < len(query) && query[i+1] == quote {
+					i++
+					continue
+				}
+				quote = 0
+			}
+			continue
+		}
+		if ch == '#' || (i+1 < len(query) && ((ch == '-' && query[i+1] == '-') || (ch == '/' && query[i+1] == '*'))) {
+			return "", errors.New("INVALID_QUERY", "SQL comments are not supported")
+		}
+		if ch == '\'' || ch == '"' || ch == '`' {
+			quote = ch
+			if depth == 0 {
+				out.WriteString(" quoted ")
+			}
+			continue
+		}
+		if ch == '(' {
+			depth++
+			out.WriteByte(' ')
+			continue
+		}
+		if ch == ')' {
+			depth--
+			if depth < 0 {
+				return "", errors.New("INVALID_QUERY", "Unbalanced SQL parentheses")
+			}
+			out.WriteByte(' ')
+			continue
+		}
+		if ch == ';' || depth == 0 {
+			out.WriteByte(ch)
+		}
+	}
+	if quote != 0 || depth != 0 {
+		return "", errors.New("INVALID_QUERY", "Unclosed SQL literal or parentheses")
+	}
+	return normalizeSQLForValidation(out.String()), nil
 }

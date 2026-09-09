@@ -79,7 +79,7 @@ func (h *Handler) BootstrapSuperAdmin(c *gin.Context) {
 
 	var bootstrapUser *user.User
 	var reason string
-	if err := h.deps.db.WithTx(func(tx *sql.Tx) error {
+	if err := h.deps.db.WithNamedLockTx(c.Request.Context(), "gin_starter.bootstrap.super_admin", func(tx *sql.Tx) error {
 		state, err := h.deps.readBootstrapState(tx)
 		if err != nil {
 			return err
@@ -155,7 +155,7 @@ func (h *Handler) BootstrapSuperAdmin(c *gin.Context) {
 }
 
 func (d *deps) assignAllPermissionsTx(tx *sql.Tx, userID string) error {
-	permissions, err := d.permissionRepo.ListPermissions()
+	rows, err := tx.Query("SELECT permission_code FROM _a_permissions ORDER BY permission_code ASC")
 	if err != nil {
 		if isMissingTableErrorForBootstrap(err) {
 			return nil
@@ -163,9 +163,20 @@ func (d *deps) assignAllPermissionsTx(tx *sql.Tx, userID string) error {
 		return err
 	}
 
-	codes := make([]string, 0, len(permissions))
-	for _, permission := range permissions {
-		codes = append(codes, permission.Code)
+	defer rows.Close()
+	var codes []string
+	for rows.Next() {
+		var code string
+		if err := rows.Scan(&code); err != nil {
+			return err
+		}
+		codes = append(codes, code)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if err := rows.Close(); err != nil {
+		return err
 	}
 
 	if err := d.permissionRepo.ReplaceUserPermissionsTx(tx, userID, codes); err != nil {
