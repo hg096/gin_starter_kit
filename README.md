@@ -30,6 +30,20 @@ AI 작업의 기본 규칙은 [internal/README.md](internal/README.md)입니다.
 
 Go 1.25.1 이상, MySQL, MySQL CLI 또는 SQL 실행 도구가 필요합니다. 아래 명령은 프로젝트 루트에서 실행합니다.
 
+### Git에서 빠르게 내려받기
+
+Windows `cmd`에서 비어 있는 프로젝트 폴더로 이동한 뒤 다음 명령을 실행합니다. 저장소 이름의 하위 폴더를 만들지 않고 현재 폴더에 바로 내려받습니다.
+
+```cmd
+cd 시작 할 폴더 주소
+git clone https://github.com/hg096/gin_starter_kit.git .
+go mod download
+```
+
+`D:\codePack\go\draw_layer`에 기존 파일이 있으면 충돌할 수 있으므로, 새 프로젝트 폴더나 비어 있는 폴더에서 실행합니다.
+
+이후 아래 DB 초기화와 환경변수 설정을 진행합니다.
+
 ### 1. 빈 DB 초기화
 
 MySQL CLI에 접속합니다. `root`는 설치용 예시이며 사용할 DB 계정으로 바꿀 수 있습니다.
